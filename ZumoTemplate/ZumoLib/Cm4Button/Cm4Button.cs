@@ -19,8 +19,7 @@ public class Cm4Button : IButton
         Pin = pin;
         Gpio = gpio;
 
-        // ToDo: Configure GPIO Pin as Input
-        throw new NotImplementedException();
+        Gpio.OpenPin(Pin, PinMode.Input);
 
         Thread t = new Thread(Run);
         t.IsBackground = true;
@@ -33,15 +32,23 @@ public class Cm4Button : IButton
 
     public bool Pressed
     {
-        get { return false; } // ToDo: Read GPIO Pin State
+        get { return Gpio.Read(Pin) == PinValue.Low; }
     }
 
     private void Run()
     {
+        bool lastPressed = Pressed;
+
         while (true)
         {
-            Console.WriteLine("Button pressed: " + Pressed);
-            Thread.Sleep(2000);
+            bool pressed = Pressed;
+            if (pressed != lastPressed)
+            {
+                lastPressed = pressed;
+                ButtonChanged?.Invoke(this, new ButtonStateChangedEventArgs(pressed));
+            }
+
+            Thread.Sleep(50);
         }
     }
 }

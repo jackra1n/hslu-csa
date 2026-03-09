@@ -18,8 +18,8 @@ public class Zumo
     {
         Gpio = new GpioController();
 
-        //Cm4Led = new Cm4Led(Gpio, 18);
-        //Cm4Button = new Cm4Button(Gpio, 27);
+        Cm4Led = new Cm4Led(Gpio, 18);
+        Cm4Button = new Cm4Button(Gpio, 27);
         //Lidar = new Lidar(Gpio);
     }
 
