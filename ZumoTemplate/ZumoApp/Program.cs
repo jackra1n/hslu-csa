@@ -15,6 +15,11 @@ class Program
     {
         Console.WriteLine("Zumo starting...");
 
+        Zumo.Instance.Cm4Button.ButtonChanged += ButtonChanged;
+
+        Console.WriteLine("CM4 button monitoring enabled.");
+        Console.WriteLine("Press Enter to toggle the CM4 LED. Press Ctrl+C to exit.");
+
         // Test Button
 #if false
         Zumo.Instance.Cm4Button.ButtonChanged += ButtonChanged;
@@ -28,6 +33,13 @@ class Program
             Thread.Sleep(100);
         }
 #endif
+
+        while (true)
+        {
+            Console.ReadLine();
+            Zumo.Instance.Cm4Led.Toggle();
+            Console.WriteLine("LED State: " + Zumo.Instance.Cm4Led.Enabled);
+        }
 
         // Test Lidar
 #if false        
