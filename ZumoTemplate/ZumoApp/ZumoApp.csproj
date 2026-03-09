@@ -14,7 +14,7 @@
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
 	  <!-- <Exec Command="echo $(SolutionDir)SecureUpload &quot;$(TargetDir) &quot; &quot;zumo:netcore/$(ProjectName)&quot;" /> -->
-    <Exec Command="rsync -avz --delete &quot;$(TargetDir)&quot; &quot;zumo:netcore/$(ProjectName)&quot;" />
+    <Exec Command="rsync -avz --delete &quot;$(TargetDir)&quot; &quot;rpicsa-home:netcore/$(ProjectName)&quot;" />
   </Target>
 
 </Project>
