@@ -1,0 +1,47 @@
+//    _____                            ____        __          __
+//   /__  /  __  ______ ___  ____     / __ \____  / /_  ____  / /_
+//     / /  / / / / __ `__ \/ __ \   / /_/ / __ \/ __ \/ __ \/ __/
+//    / /__/ /_/ / / / / / / /_/ /  / _, _/ /_/ / /_/ / /_/ / /_
+//   /____/\__,_/_/ /_/ /_/\____/  /_/ |_|\____/_.___/\____/\__/
+//   (c) Hochschule Luzern T&A ========== www.hslu.ch ============
+//
+using System;
+using System.Device.Gpio;
+
+namespace ZumoLib;
+
+public class Cm4Button : IButton
+{
+    public event EventHandler<ButtonStateChangedEventArgs>? ButtonChanged;
+
+    internal Cm4Button(GpioController gpio, int pin)
+    {
+        Pin = pin;
+        Gpio = gpio;
+
+        // ToDo: Configure GPIO Pin as Input
+        throw new NotImplementedException();
+
+        Thread t = new Thread(Run);
+        t.IsBackground = true;
+        t.Start();
+    }
+
+    internal GpioController Gpio { get; }
+    public int Pin { get; }
+
+
+    public bool Pressed
+    {
+        get { return false; } // ToDo: Read GPIO Pin State
+    }
+
+    private void Run()
+    {
+        while (true)
+        {
+            Console.WriteLine("Button pressed: " + Pressed);
+            Thread.Sleep(2000);
+        }
+    }
+}

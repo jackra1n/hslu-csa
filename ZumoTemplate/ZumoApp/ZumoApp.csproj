@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RuntimeIdentifier>linux-arm64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ZumoLib/ZumoLib.csproj" />
+  </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+	  <!-- <Exec Command="echo $(SolutionDir)SecureUpload &quot;$(TargetDir) &quot; &quot;zumo:netcore/$(ProjectName)&quot;" /> -->
+    <Exec Command="rsync -avz --delete &quot;$(TargetDir)&quot; &quot;zumo:netcore/$(ProjectName)&quot;" />
+  </Target>
+
+</Project>

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ZumoApp/ZumoApp.csproj" />
+  <Project Path="ZumoLib/ZumoLib.csproj" />
+</Solution>
