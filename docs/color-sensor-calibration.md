@@ -2,7 +2,7 @@
 
 Sources:
 
-- `CSA-Lab-Teil2v2.pdf`
+- `CSA-Lab-Teil2v3.pdf`
 - `Farbmuster.pdf`
 
 This guide defines a practical approach to detect maze floor markers (red/green) robustly.

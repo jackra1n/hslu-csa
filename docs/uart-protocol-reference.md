@@ -2,6 +2,8 @@
 
 This document is the programming reference for commands sent to Zumo modules over UART.
 
+Version note: reflects `CSA-Lab-Teil2v3.pdf`.
+
 ## Message format
 
 - Set command prefix: `5>`
@@ -25,6 +27,15 @@ Example connectivity check:
   - `FFA6` = `-90`
 
 ## Drive module (`0x24`)
+
+### Move distance with drift offset
+
+- Command: `5>24CSSSSVVVVAAAAOO`
+- `SSSS`: distance (mm, signed)
+- `VVVV`: speed (mm/s)
+- `AAAA`: acceleration (mm/s^2)
+- `OO`: signed correction offset in `0.1 mm/s`
+- Use this variant when straight travel drifts and a small continuous correction is needed.
 
 ### Move distance
 

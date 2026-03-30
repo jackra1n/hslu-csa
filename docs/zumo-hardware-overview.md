@@ -42,6 +42,7 @@ Use `docs/uart-protocol-reference.md` for command-level details.
 
 - UART commands must end with line feed.
 - Many payload fields are signed 16-bit two's complement values encoded in hex.
+- Drive module also supports an offset-enabled move command (`5>24C...OO`) for drift correction.
 - LiDAR distance unit is mm.
 - LiDAR angles are clockwise and require wrap-around handling near `360` degrees.
 
