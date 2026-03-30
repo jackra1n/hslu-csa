@@ -11,3 +11,9 @@ The goal of this project is to use **C# and .NET** to control a Raspberry Pi bas
 - **Raspberry Pi CM4**
 - **[tio](https://github.com/tio/tio)** for serial communication
 - **[mise](https://github.com/jdx/mise)** for managing development tools
+
+## Build
+
+Build the project with `mise run build`.
+
+If you want to run `dotnet` through mise directly, use `mise x -- dotnet ...`.
