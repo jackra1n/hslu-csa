@@ -4,7 +4,7 @@
 //    / /__/ /_/ / / / / / / /_/ /  / _, _/ /_/ / /_/ / /_/ / /_
 //   /____/\__,_/_/ /_/ /_/\____/  /_/ |_|\____/_.___/\____/\__/
 //   (c) Hochschule Luzern T&A ========== www.hslu.ch ============
-//
+//   
 using ZumoLib;
 
 namespace ZumoApp;
@@ -13,55 +13,81 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.WriteLine("Zumo starting...");
-
+        Utils.WaitForDebugger();
+        
         Zumo.Instance.Cm4Button.ButtonChanged += ButtonChanged;
-
-        Console.WriteLine("CM4 button monitoring enabled.");
-        Console.WriteLine("Press Enter to toggle the CM4 LED. Press Ctrl+C to exit.");
-
-        // Test Button
-#if false
-        Zumo.Instance.Cm4Button.ButtonChanged += ButtonChanged;
-#endif        
-
-        // Test Led
-#if false
-        for (int i = 0; i < 6; i++)
-        {
-            Zumo.Instance.Cm4Led.Toggle();
-            Thread.Sleep(100);
-        }
-#endif
+        Zumo.Instance.ZumoButton.ButtonChanged += ButtonChanged2;
 
         while (true)
         {
-            Console.ReadLine();
-            Zumo.Instance.Cm4Led.Toggle();
-            Console.WriteLine("LED State: " + Zumo.Instance.Cm4Led.Enabled);
+            Console.WriteLine();
+            Console.WriteLine("F1   Track +1000 mm");
+            Console.WriteLine("F2   Track -1000 mm");
+            Console.WriteLine("F3   Turn +90°");
+            Console.WriteLine("F4   Turn -90°");
+            Console.WriteLine("F5   Lidar On");
+            Console.WriteLine("F6   Lidar Off");
+            Console.WriteLine("F8   Ping Zumo");
+            Console.WriteLine("F9   Toggle Led");
+            bool redir = Console.IsInputRedirected;
+            ConsoleKeyInfo key = Console.ReadKey();
+
+            switch (key.Key)
+            {
+                case ConsoleKey.F1:
+                    //Zumo.Instance.Drive.DriveTrack(500, 100, 100);
+                    break;
+
+                case ConsoleKey.F2:
+                    //Zumo.Instance.Drive.DriveTrack(-500, 100, 100);
+                    break;
+
+                case ConsoleKey.F3:
+                    //Zumo.Instance.Drive.DriveTurn(90, 100, 100);
+                    break;
+
+                case ConsoleKey.F4:
+                    //Zumo.Instance.Drive.DriveTurn(-90, 100, 100);
+                    break;
+
+                case ConsoleKey.F5:
+                    // Zumo.Instance.Lidar.SetPower(true);
+                    // while (!Console.KeyAvailable)
+                    // {
+                    //     LidarPoint p = Zumo.Instance.Lidar[45];
+                    //     //Console.SetCursorPosition(0, 0);
+                    //     Console.WriteLine($"Speed {Zumo.Instance.Lidar.Speed} °/sec \tDistance: {p.Distance / 1000f} m    ");
+                    //     Thread.Sleep(200);
+                    // }
+                    break;
+                case ConsoleKey.F6:
+                    //Zumo.Instance.Lidar.SetPower(false);
+                    break;
+
+                case ConsoleKey.F8:
+                    bool result = Zumo.Instance.Ping.DoPing();
+                    Console.WriteLine("Ping " + (result ? "OK" : "timeout"));
+                    break;
+
+                case ConsoleKey.F9:
+                    Zumo.Instance.Cm4Led.Toggle();
+                    break;
+
+                case ConsoleKey.Escape:
+                    //Zumo.Instance.Lidar.SetPower(false);
+                    return;
+            }
         }
-
-        // Test Lidar
-#if false        
-        Lidar lidar = Zumo.Instance.Lidar;
-        lidar.SetPower(false);
-        Console.ReadKey();
-        lidar.SetPower(true);
-
-        while (!Console.KeyAvailable)
-        {
-            LidarPoint p = lidar[45];
-            Console.WriteLine(lidar.Speed + "\t" + p.Distance / 1000f);
-            Thread.Sleep(200);
-        }
-
-        lidar.SetPower(false);
-#endif
-
     }
-    
+
+
     public static void ButtonChanged(object? sender, ButtonStateChangedEventArgs args)
     {
-        Console.WriteLine("Button State: " + args.Pressed);
+        Console.WriteLine("CM4 Button State: " + args.Pressed);
+    }
+
+    public static void ButtonChanged2(object? sender, ButtonStateChangedEventArgs args)
+    {
+        Console.WriteLine("Zumo Button State: " + args.Pressed);
     }
 }

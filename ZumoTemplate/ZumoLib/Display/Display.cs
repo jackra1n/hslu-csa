@@ -9,8 +9,23 @@ using System;
 
 namespace ZumoLib;
 
-public struct LidarPoint
+public class Display
 {
-    public UInt16 Distance;
-    public byte Intensity;
+    private const string backlightPath = "/sys/class/backlight/10-0045/brightness";
+
+    public void Dim(byte value)
+    {
+        File.WriteAllText(backlightPath, value.ToString());
+    }
+
+    public void PowerOff()
+    {
+        Dim(0);
+    }
+
+    public void PowerOn()
+    {
+        Dim(255);
+    }
+
 }
