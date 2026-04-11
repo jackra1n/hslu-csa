@@ -18,32 +18,66 @@ class Program
         Zumo.Instance.Cm4Button.ButtonChanged += ButtonChanged;
         Zumo.Instance.ZumoButton.ButtonChanged += ButtonChanged2;
 
+        MazeRunner runner = new MazeRunner();
+        CancellationTokenSource? runToken = null;
+
         while (true)
         {
             Console.WriteLine();
-            Console.WriteLine("F1   Track +500 mm");
-            Console.WriteLine("F2   Track -500 mm");
-            Console.WriteLine("F3   Turn +90°");
-            Console.WriteLine("F4   Turn -90°");
-            Console.WriteLine("F5   Lidar On");
-            Console.WriteLine("F6   Lidar Off");
+            Console.WriteLine("F1   Start maze run (with color calibration)");
+            Console.WriteLine("F2   Stop maze run");
+            Console.WriteLine("F3   Turn +90° (manual)");
+            Console.WriteLine("F4   Turn -90° (manual)");
+            Console.WriteLine("F5   Lidar On (manual)");
+            Console.WriteLine("F6   Lidar Off (manual)");
             Console.WriteLine("F7   Read Color Sensor");
             Console.WriteLine("F8   Ping Zumo");
             Console.WriteLine("F9   Toggle Led");
-            Console.WriteLine("F11  Color Calibrate Black");
-            Console.WriteLine("F12  Color Calibrate White");
+            Console.WriteLine("ESC  Exit");
             ConsoleKeyInfo key = Console.ReadKey();
 
             switch (key.Key)
             {
                 case ConsoleKey.F1:
-                    Console.WriteLine("Driving forward 500 mm");
-                    TryDrive(500);
+                    if (runToken != null)
+                    {
+                        Console.WriteLine("Maze run already active.");
+                        break;
+                    }
+
+                    Console.WriteLine("Calibrating color sensor...");
+                    Console.WriteLine("Place robot on BLACK surface and press Enter...");
+                    Console.ReadLine();
+                    RunColorCalibrationStep(true);
+                    Thread.Sleep(400);
+
+                    Console.WriteLine("Place robot on WHITE surface and press Enter...");
+                    Console.ReadLine();
+                    RunColorCalibrationStep(false);
+                    Thread.Sleep(400);
+
+                    Console.WriteLine("Calibration complete. Starting maze run...");
+                    runToken = new CancellationTokenSource();
+                    CancellationTokenSource runTokenLocal = runToken;
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            runner.Run(runTokenLocal.Token);
+                        }
+                        finally
+                        {
+                            runTokenLocal.Dispose();
+                            if (ReferenceEquals(runToken, runTokenLocal))
+                            {
+                                runToken = null;
+                            }
+                        }
+                    });
                     break;
 
                 case ConsoleKey.F2:
-                    Console.WriteLine("Driving backward 500 mm");
-                    TryDrive(-500);
+                    runToken?.Cancel();
                     break;
 
                 case ConsoleKey.F3:
@@ -83,15 +117,8 @@ class Program
                     Zumo.Instance.Cm4Led.Toggle();
                     break;
 
-                case ConsoleKey.F11:
-                    RunColorCalibrationStep(true);
-                    break;
-
-                case ConsoleKey.F12:
-                    RunColorCalibrationStep(false);
-                    break;
-
                 case ConsoleKey.Escape:
+                    runToken?.Cancel();
                     Zumo.Instance.Lidar.SetPower(false);
                     return;
             }
@@ -107,21 +134,6 @@ class Program
     public static void ButtonChanged2(object? sender, ButtonStateChangedEventArgs args)
     {
         Console.WriteLine("Zumo Button State: " + args.Pressed);
-
-        if (args.Pressed)
-        {
-            SoundItem[] songs = Enum.GetValues<SoundItem>();
-            SoundItem song = songs[Random.Shared.Next(songs.Length)];
-            Zumo.Instance.Sound.Play(song);
-        }
-    }
-
-    private static void TryDrive(short distance)
-    {
-        if (!Zumo.Instance.Drive.Forward(distance, 100, 100))
-        {
-            Console.WriteLine("Drive command rejected.");
-        }
     }
 
     private static void TryRotate(short angle)
