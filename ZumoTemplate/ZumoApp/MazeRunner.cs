@@ -8,23 +8,25 @@ public class MazeRunner
     private const ushort MoveAcceleration = 110;
 
     private const short TurnAngleDegrees = 90;
-    private const short ProbeStepMillimeters = 70;
+    private const short ProbeStepMillimeters = 120;
     private const short MarkerCrossDistanceMillimeters = 140;
     private const short RecoveryBacktrackMillimeters = -90;
-    private const short MaxForwardChunkMillimeters = 30;
+    private const short MaxForwardChunkMillimeters = 150;
 
-    private const int FrontBlockedThresholdMillimeters = 210;
+    private const int FrontBlockedThresholdMillimeters = 170;
     private const int FrontClearThresholdMillimeters = 280;
     private const int SideOpeningThresholdMillimeters = 320;
     private const int ExitThresholdMillimeters = 1250;
 
-    private const int FrontSectorHalfWidthDegrees = 14;
+    private const int FrontSectorHalfWidthDegrees = 8;
     private const int SideSectorHalfWidthDegrees = 18;
     private const int SectorAngleStepDegrees = 2;
+    private const int EmergencyStopConfirmSamples = 3;
 
     private const int MarkerConfirmationSamples = 3;
     private static readonly TimeSpan MarkerSamplePeriod = TimeSpan.FromMilliseconds(35);
     private static readonly TimeSpan MarkerCooldown = TimeSpan.FromMilliseconds(800);
+    private static readonly TimeSpan PostTurnSensorSettle = TimeSpan.FromMilliseconds(140);
 
     private const int MaxSteps = 320;
 
@@ -119,17 +121,20 @@ public class MazeRunner
         switch (direction)
         {
             case Direction.Right:
-                DriveTurn(-TurnAngleDegrees, cancellationToken);
-                break;
-            case Direction.Left:
+                Console.WriteLine("Turn command: +90 (right)");
                 DriveTurn(TurnAngleDegrees, cancellationToken);
                 break;
+            case Direction.Left:
+                Console.WriteLine("Turn command: -90 (left)");
+                DriveTurn(-TurnAngleDegrees, cancellationToken);
+                break;
         }
+
+        Thread.Sleep(PostTurnSensorSettle);
 
         if (!SafeTrackForward(ProbeStepMillimeters, cancellationToken))
         {
             Console.WriteLine("Blocked during approach, recovering...");
-            DriveTrackRaw(RecoveryBacktrackMillimeters, cancellationToken);
             UndoTurn(direction, cancellationToken);
             SetStatusLed(120, 0, 0);
             return false;
@@ -243,7 +248,18 @@ public class MazeRunner
             return;
         }
 
-        WaitDriveFinished(cancellationToken);
+        WaitDriveFinished(cancellationToken, monitorFrontSafety: false);
+    }
+
+    private static bool DriveTrackWithSafety(short length, CancellationToken cancellationToken)
+    {
+        if (!Zumo.Instance.Drive.DriveTrack(length, MoveSpeed, MoveAcceleration))
+        {
+            Console.WriteLine("DriveTrack command rejected.");
+            return false;
+        }
+
+        return WaitDriveFinished(cancellationToken, monitorFrontSafety: true);
     }
 
     private static void DriveTurn(short angle, CancellationToken cancellationToken)
@@ -254,16 +270,37 @@ public class MazeRunner
             return;
         }
 
-        WaitDriveFinished(cancellationToken);
+        WaitDriveFinished(cancellationToken, monitorFrontSafety: false);
     }
 
-    private static void WaitDriveFinished(CancellationToken cancellationToken)
+    private static bool WaitDriveFinished(CancellationToken cancellationToken, bool monitorFrontSafety)
     {
         DateTime timeout = DateTime.UtcNow.AddSeconds(6);
+        int consecutiveBlocked = 0;
+        bool stoppedBySafety = false;
 
         while (Zumo.Instance.Drive.DriveIsRunning())
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (monitorFrontSafety)
+            {
+                int clearance = GetSectorClearance(0, FrontSectorHalfWidthDegrees);
+                if (clearance > 0 && clearance <= FrontBlockedThresholdMillimeters)
+                {
+                    consecutiveBlocked++;
+                    if (consecutiveBlocked >= EmergencyStopConfirmSamples)
+                    {
+                        Console.WriteLine($"Emergency stop: front clearance {clearance} mm");
+                        Zumo.Instance.Drive.Stop();
+                        stoppedBySafety = true;
+                    }
+                }
+                else
+                {
+                    consecutiveBlocked = 0;
+                }
+            }
 
             if (DateTime.UtcNow > timeout)
             {
@@ -273,6 +310,8 @@ public class MazeRunner
 
             Thread.Sleep(20);
         }
+
+        return !stoppedBySafety;
     }
 
     private static bool SafeTrackForward(short length, CancellationToken cancellationToken)
@@ -297,7 +336,11 @@ public class MazeRunner
             }
 
             short chunk = (short)Math.Min(remaining, MaxForwardChunkMillimeters);
-            DriveTrackRaw(chunk, cancellationToken);
+            if (!DriveTrackWithSafety(chunk, cancellationToken))
+            {
+                return false;
+            }
+
             remaining -= chunk;
         }
 
