@@ -4,18 +4,23 @@ namespace ZumoApp;
 
 public class MazeRunner
 {
-    private const ushort MoveSpeed = 110;
-    private const ushort MoveAcceleration = 120;
+    private const ushort MoveSpeed = 95;
+    private const ushort MoveAcceleration = 110;
 
     private const short TurnAngleDegrees = 90;
-    private const short ProbeStepMillimeters = 80;
+    private const short ProbeStepMillimeters = 70;
     private const short MarkerCrossDistanceMillimeters = 140;
     private const short RecoveryBacktrackMillimeters = -90;
+    private const short MaxForwardChunkMillimeters = 30;
 
-    private const int FrontBlockedThresholdMillimeters = 230;
-    private const int FrontClearThresholdMillimeters = 290;
-    private const int SideOpeningThresholdMillimeters = 330;
+    private const int FrontBlockedThresholdMillimeters = 210;
+    private const int FrontClearThresholdMillimeters = 280;
+    private const int SideOpeningThresholdMillimeters = 320;
     private const int ExitThresholdMillimeters = 1250;
+
+    private const int FrontSectorHalfWidthDegrees = 14;
+    private const int SideSectorHalfWidthDegrees = 18;
+    private const int SectorAngleStepDegrees = 2;
 
     private const int MarkerConfirmationSamples = 3;
     private static readonly TimeSpan MarkerSamplePeriod = TimeSpan.FromMilliseconds(35);
@@ -25,11 +30,15 @@ public class MazeRunner
 
     private DateTime _lastMarkerTriggerAt = DateTime.MinValue;
 
-    public void Run(CancellationToken cancellationToken)
+    public void Run(CancellationToken cancellationToken, bool lidarPrewarmed = false)
     {
         Console.WriteLine("Maze run started.");
-        Zumo.Instance.Lidar.SetPower(true);
-        Thread.Sleep(600);
+        SetStatusLed(24, 24, 100);
+        if (!lidarPrewarmed)
+        {
+            Zumo.Instance.Lidar.SetPower(true);
+            Thread.Sleep(2200);
+        }
 
         try
         {
@@ -37,9 +46,9 @@ public class MazeRunner
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                int front = MedianDistance(0, 2);
-                int right = MedianDistance(90, 2);
-                int left = MedianDistance(270, 2);
+                int front = GetSectorClearance(0, FrontSectorHalfWidthDegrees);
+                int right = GetSectorClearance(90, SideSectorHalfWidthDegrees);
+                int left = GetSectorClearance(270, SideSectorHalfWidthDegrees);
 
                 Console.WriteLine($"step={step:D3} front={front} right={right} left={left}");
 
@@ -77,6 +86,7 @@ public class MazeRunner
         }
         finally
         {
+            SetStatusLed(0, 0, 0);
             Zumo.Instance.Lidar.SetPower(false);
         }
     }
@@ -104,6 +114,7 @@ public class MazeRunner
     private bool TryTraverseOpening(Direction direction, CancellationToken cancellationToken)
     {
         Console.WriteLine($"Trying {direction} opening...");
+        SetStatusLed(100, 70, 0);
 
         switch (direction)
         {
@@ -115,26 +126,36 @@ public class MazeRunner
                 break;
         }
 
-        DriveTrack(ProbeStepMillimeters, cancellationToken);
-
-        if (MedianDistance(0, 1) <= FrontBlockedThresholdMillimeters)
+        if (!SafeTrackForward(ProbeStepMillimeters, cancellationToken))
         {
             Console.WriteLine("Blocked during approach, recovering...");
-            DriveTrack(RecoveryBacktrackMillimeters, cancellationToken);
+            DriveTrackRaw(RecoveryBacktrackMillimeters, cancellationToken);
             UndoTurn(direction, cancellationToken);
+            SetStatusLed(120, 0, 0);
             return false;
         }
 
         if (!ConfirmMarkerDuringCrossing(cancellationToken))
         {
             Console.WriteLine("No valid marker confirmed, backing out...");
-            DriveTrack(RecoveryBacktrackMillimeters, cancellationToken);
+            DriveTrackRaw(RecoveryBacktrackMillimeters, cancellationToken);
             UndoTurn(direction, cancellationToken);
+            SetStatusLed(120, 0, 0);
             return false;
         }
 
         Console.WriteLine("Marker confirmed, crossing opening.");
-        DriveTrack(MarkerCrossDistanceMillimeters, cancellationToken);
+        SetStatusLed(0, 95, 0);
+        if (!SafeTrackForward(MarkerCrossDistanceMillimeters, cancellationToken))
+        {
+            Console.WriteLine("Blocked while crossing, backing out...");
+            DriveTrackRaw(RecoveryBacktrackMillimeters, cancellationToken);
+            UndoTurn(direction, cancellationToken);
+            SetStatusLed(120, 0, 0);
+            return false;
+        }
+
+        SetStatusLed(24, 24, 100);
         return true;
     }
 
@@ -191,14 +212,14 @@ public class MazeRunner
     {
         Console.WriteLine("Exit detected.");
         Zumo.Instance.Sound.Play(SoundItem.SuperMario);
-        DriveTrack(250, cancellationToken);
+        DriveTrackRaw(250, cancellationToken);
         Zumo.Instance.Drive.Stop();
     }
 
     private static void RecoverFromDeadEnd(CancellationToken cancellationToken)
     {
-        Console.WriteLine("Dead end recovery: turn left.");
-        DriveTurn(TurnAngleDegrees, cancellationToken);
+        Console.WriteLine("Dead end recovery: turn around.");
+        DriveTurn(180, cancellationToken);
     }
 
     private static void UndoTurn(Direction direction, CancellationToken cancellationToken)
@@ -214,7 +235,7 @@ public class MazeRunner
         }
     }
 
-    private static void DriveTrack(short length, CancellationToken cancellationToken)
+    private static void DriveTrackRaw(short length, CancellationToken cancellationToken)
     {
         if (!Zumo.Instance.Drive.DriveTrack(length, MoveSpeed, MoveAcceleration))
         {
@@ -254,11 +275,40 @@ public class MazeRunner
         }
     }
 
-    private static int MedianDistance(int centerAngle, int span)
+    private static bool SafeTrackForward(short length, CancellationToken cancellationToken)
     {
-        List<int> values = new List<int>(span * 2 + 1);
+        if (length <= 0)
+        {
+            DriveTrackRaw(length, cancellationToken);
+            return true;
+        }
 
-        for (int offset = -span; offset <= span; offset++)
+        int remaining = length;
+        while (remaining > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            int clearance = GetSectorClearance(0, FrontSectorHalfWidthDegrees);
+            if (clearance == 0 || clearance <= FrontBlockedThresholdMillimeters)
+            {
+                Console.WriteLine($"Safety stop: front clearance {clearance} mm");
+                Zumo.Instance.Drive.Stop();
+                return false;
+            }
+
+            short chunk = (short)Math.Min(remaining, MaxForwardChunkMillimeters);
+            DriveTrackRaw(chunk, cancellationToken);
+            remaining -= chunk;
+        }
+
+        return true;
+    }
+
+    private static int GetSectorClearance(int centerAngle, int halfWidth)
+    {
+        List<int> values = new List<int>((halfWidth * 2 / SectorAngleStepDegrees) + 1);
+
+        for (int offset = -halfWidth; offset <= halfWidth; offset += SectorAngleStepDegrees)
         {
             int angle = (centerAngle + offset + 360) % 360;
             int distance = Zumo.Instance.Lidar[angle].Distance;
@@ -274,7 +324,14 @@ public class MazeRunner
         }
 
         values.Sort();
-        return values[values.Count / 2];
+        int quantileIndex = Math.Max(0, (values.Count - 1) / 4);
+        return values[quantileIndex];
+    }
+
+    private static void SetStatusLed(byte r, byte g, byte b)
+    {
+        Zumo.Instance.RgbLedRearLeft.SetValue(r, g, b);
+        Zumo.Instance.RgbLedRearRight.SetValue(r, g, b);
     }
 
     private enum Direction

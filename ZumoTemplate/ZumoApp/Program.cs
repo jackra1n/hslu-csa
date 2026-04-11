@@ -56,6 +56,10 @@ class Program
                     RunColorCalibrationStep(false);
                     Thread.Sleep(400);
 
+                    Console.WriteLine("Powering on LiDAR and waiting for stable data...");
+                    Zumo.Instance.Lidar.SetPower(true);
+                    Thread.Sleep(2200);
+
                     Console.WriteLine("Calibration complete.");
                     Console.WriteLine("Place robot at maze start position and press Enter to start maze run...");
                     Console.ReadLine();
@@ -66,7 +70,7 @@ class Program
                     {
                         try
                         {
-                            runner.Run(runTokenLocal.Token);
+                            runner.Run(runTokenLocal.Token, lidarPrewarmed: true);
                         }
                         finally
                         {
