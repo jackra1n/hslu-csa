@@ -90,6 +90,11 @@ class Program
     public static void ButtonChanged2(object? sender, ButtonStateChangedEventArgs args)
     {
         Console.WriteLine("Zumo Button State: " + args.Pressed);
+
+        if (args.Pressed)
+        {
+            Zumo.Instance.Sound.Beep(440, 100);
+        }
     }
 
     private static void TryDrive(short distance)
