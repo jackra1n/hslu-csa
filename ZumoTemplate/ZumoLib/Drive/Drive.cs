@@ -16,7 +16,6 @@ public class Drive : ComDevice
     private const byte EncoderDispatcher = 0x22;
 
     public event EventHandler? DriveFinished;
-    public string LastResponse { get; private set; } = string.Empty;
 
     public Drive(ICom com) : base(com, DriveDispatcher, EncoderDispatcher)
     {
@@ -29,7 +28,7 @@ public class Drive : ComDevice
 
     public bool DriveTrack(short distance, ushort speed, ushort acceleration, sbyte offset = 0)
     {
-        return Forward(distance, unchecked((short)speed), unchecked((short)acceleration));
+        return SendSetAndCheck(DriveDispatcher, $"C{distance:X4}{speed:X4}{acceleration:X4}{unchecked((byte)offset):X2}");
     }
 
     public bool Rotate(short angle, short speed = 1000, short acceleration = 1000)
@@ -37,9 +36,9 @@ public class Drive : ComDevice
         return SendSetAndCheck(DriveDispatcher, $"A{angle:X4}{speed:X4}{acceleration:X4}");
     }
 
-    public void DriveTurn(short angle, ushort speed, ushort acceleration)
+    public bool DriveTurn(short angle, ushort speed, ushort acceleration)
     {
-        Rotate(angle, unchecked((short)speed), unchecked((short)acceleration));
+        return Rotate(angle, unchecked((short)speed), unchecked((short)acceleration));
     }
 
     public bool ConstantSpeed(short leftSpeed, short rightSpeed)
@@ -57,9 +56,9 @@ public class Drive : ComDevice
         return SendSetAndCheck(DriveDispatcher, $"B{calibrationFactor:X4}");
     }
 
-    public void DriveTurnCalib(short factor)
+    public bool DriveTurnCalib(short factor)
     {
-        SetRotationCalibrationFactor(factor);
+        return SetRotationCalibrationFactor(factor);
     }
 
     public (short leftSpeed, short rightSpeed) GetCurrentSpeed()
@@ -127,12 +126,6 @@ public class Drive : ComDevice
         return SendSetAndCheck(EncoderDispatcher, $"1{calibrationFactor:X4}");
     }
 
-    public bool QueryRotationCalibrationFactor()
-    {
-        LastResponse = GetRequest(5, DriveDispatcher, "B");
-        return IsAcceptedResponse(LastResponse);
-    }
-
     public void Stop()
     {
         ConstantSpeed(0, 0);
@@ -156,8 +149,8 @@ public class Drive : ComDevice
 
     private bool SendSetAndCheck(byte dispatcher, string payload)
     {
-        LastResponse = SetRequest(5, dispatcher, payload);
-        return IsAcceptedResponse(LastResponse);
+        string response = SetRequest(5, dispatcher, payload);
+        return IsAcceptedResponse(response);
     }
 
     private static bool IsAcceptedResponse(string response)

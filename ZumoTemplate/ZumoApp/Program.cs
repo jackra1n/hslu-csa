@@ -1,4 +1,4 @@
-﻿//    _____                            ____        __          __
+//    _____                            ____        __          __
 //   /__  /  __  ______ ___  ____     / __ \____  / /_  ____  / /_
 //     / /  / / / / __ `__ \/ __ \   / /_/ / __ \/ __ \/ __ \/ __/
 //    / /__/ /_/ / / / / / / /_/ /  / _, _/ /_/ / /_/ / /_/ / /_
@@ -21,15 +21,14 @@ class Program
         while (true)
         {
             Console.WriteLine();
-            Console.WriteLine("F1   Track +1000 mm");
-            Console.WriteLine("F2   Track -1000 mm");
+            Console.WriteLine("F1   Track +500 mm");
+            Console.WriteLine("F2   Track -500 mm");
             Console.WriteLine("F3   Turn +90°");
             Console.WriteLine("F4   Turn -90°");
             Console.WriteLine("F5   Lidar On");
             Console.WriteLine("F6   Lidar Off");
             Console.WriteLine("F8   Ping Zumo");
             Console.WriteLine("F9   Toggle Led");
-            bool redir = Console.IsInputRedirected;
             ConsoleKeyInfo key = Console.ReadKey();
 
             switch (key.Key)
@@ -95,21 +94,9 @@ class Program
 
     private static void TryDrive(short distance)
     {
-        Zumo.Instance.Drive.ResetEncoderDistance();
-
-        bool accepted = Zumo.Instance.Drive.Forward(distance, 100, 100);
-        Console.WriteLine($"Track command accepted: {accepted} ({Zumo.Instance.Drive.LastResponse})");
-
-        if (!accepted)
+        if (!Zumo.Instance.Drive.Forward(distance, 100, 100))
         {
-            short speed = distance >= 0 ? (short)80 : (short)-80;
-            Console.WriteLine("Falling back to constant-speed test for 800 ms");
-            bool constantAccepted = Zumo.Instance.Drive.ConstantSpeed(speed, speed);
-            Console.WriteLine($"Constant-speed command accepted: {constantAccepted} ({Zumo.Instance.Drive.LastResponse})");
-            Thread.Sleep(800);
-            Zumo.Instance.Drive.Stop();
+            Console.WriteLine("Drive command rejected.");
         }
-
-        Thread.Sleep(100);
     }
 }
