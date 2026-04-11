@@ -11,6 +11,13 @@ namespace ZumoApp;
 
 class Program
 {
+    private static readonly SoundItem[] ButtonSongs =
+    [
+        SoundItem.StarWars,
+        SoundItem.HarryPotter,
+        SoundItem.IndianaJones
+    ];
+
     static void Main(string[] args)
     {
         Utils.WaitForDebugger();
@@ -93,7 +100,8 @@ class Program
 
         if (args.Pressed)
         {
-            Zumo.Instance.Sound.Beep(440, 100);
+            SoundItem song = ButtonSongs[Random.Shared.Next(ButtonSongs.Length)];
+            Zumo.Instance.Sound.Play(song);
         }
     }
 
