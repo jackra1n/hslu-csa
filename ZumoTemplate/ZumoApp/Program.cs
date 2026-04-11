@@ -51,11 +51,13 @@ class Program
                     break;
 
                 case ConsoleKey.F3:
-                    //Zumo.Instance.Drive.DriveTurn(90, 100, 100);
+                    Console.WriteLine("Turning clockwise 90°");
+                    TryRotate(90);
                     break;
 
                 case ConsoleKey.F4:
-                    //Zumo.Instance.Drive.DriveTurn(-90, 100, 100);
+                    Console.WriteLine("Turning counter-clockwise 90°");
+                    TryRotate(-90);
                     break;
 
                 case ConsoleKey.F5:
@@ -110,6 +112,14 @@ class Program
         if (!Zumo.Instance.Drive.Forward(distance, 100, 100))
         {
             Console.WriteLine("Drive command rejected.");
+        }
+    }
+
+    private static void TryRotate(short angle)
+    {
+        if (!Zumo.Instance.Drive.Rotate(angle))
+        {
+            Console.WriteLine("Rotate command rejected.");
         }
     }
 }
