@@ -4,7 +4,7 @@
 //    / /__/ /_/ / / / / / / /_/ /  / _, _/ /_/ / /_/ / /_/ / /_
 //   /____/\__,_/_/ /_/ /_/\____/  /_/ |_|\____/_.___/\____/\__/
 //   (c) Hochschule Luzern T&A ========== www.hslu.ch ============
-//   
+//
 using System;
 using System.IO.Ports;
 
@@ -31,7 +31,7 @@ public class Com : ICom
 
     public void SendMessage(string message)
     {
-        log.Trace(message);
+        //log.Trace(message);
         SerialPort.WriteLine(message);
     }
 
@@ -41,7 +41,7 @@ public class Com : ICom
         while (true)
         {
             msg = SerialPort.ReadLine();
-            log.Trace(msg);
+            //log.Trace(msg);
             ComEventArgs e = new ComEventArgs(msg);
             try
             {
@@ -60,4 +60,3 @@ public class Com : ICom
     }
 
 }
-
