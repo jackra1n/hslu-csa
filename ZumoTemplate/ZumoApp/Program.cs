@@ -56,7 +56,10 @@ class Program
                     RunColorCalibrationStep(false);
                     Thread.Sleep(400);
 
-                    Console.WriteLine("Calibration complete. Starting maze run...");
+                    Console.WriteLine("Calibration complete.");
+                    Console.WriteLine("Place robot at maze start position and press Enter to start maze run...");
+                    Console.ReadLine();
+                    Console.WriteLine("Starting maze run...");
                     runToken = new CancellationTokenSource();
                     CancellationTokenSource runTokenLocal = runToken;
                     Task.Run(() =>
