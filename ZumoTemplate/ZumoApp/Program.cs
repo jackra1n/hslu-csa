@@ -27,8 +27,11 @@ class Program
             Console.WriteLine("F4   Turn -90°");
             Console.WriteLine("F5   Lidar On");
             Console.WriteLine("F6   Lidar Off");
+            Console.WriteLine("F7   Read Color Sensor");
             Console.WriteLine("F8   Ping Zumo");
             Console.WriteLine("F9   Toggle Led");
+            Console.WriteLine("F11  Color Calibrate Black");
+            Console.WriteLine("F12  Color Calibrate White");
             ConsoleKeyInfo key = Console.ReadKey();
 
             switch (key.Key)
@@ -67,6 +70,10 @@ class Program
                     Zumo.Instance.Lidar.SetPower(false);
                     break;
 
+                case ConsoleKey.F7:
+                    ReadColorSensor();
+                    break;
+
                 case ConsoleKey.F8:
                     bool result = Zumo.Instance.Ping.DoPing();
                     Console.WriteLine("Ping " + (result ? "OK" : "timeout"));
@@ -74,6 +81,14 @@ class Program
 
                 case ConsoleKey.F9:
                     Zumo.Instance.Cm4Led.Toggle();
+                    break;
+
+                case ConsoleKey.F11:
+                    RunColorCalibrationStep(true);
+                    break;
+
+                case ConsoleKey.F12:
+                    RunColorCalibrationStep(false);
                     break;
 
                 case ConsoleKey.Escape:
@@ -115,5 +130,31 @@ class Program
         {
             Console.WriteLine("Rotate command rejected.");
         }
+    }
+
+    private static void ReadColorSensor()
+    {
+        ushort? hue = Zumo.Instance.ColorSensor.ReadHue();
+        DetectedColor color = ColorSensor.Classify(hue);
+
+        if (hue.HasValue)
+        {
+            Console.WriteLine($"Color sensor hue: {hue.Value}°, detected: {color}");
+        }
+        else
+        {
+            Console.WriteLine($"Color sensor hue invalid, detected: {color}");
+        }
+    }
+
+    private static void RunColorCalibrationStep(bool blackReference)
+    {
+        bool result = blackReference
+            ? Zumo.Instance.ColorSensor.CalibrateBlack()
+            : Zumo.Instance.ColorSensor.CalibrateWhite();
+
+        Console.WriteLine(result
+            ? $"Color sensor {(blackReference ? "black" : "white")} calibration accepted."
+            : $"Color sensor {(blackReference ? "black" : "white")} calibration rejected.");
     }
 }
