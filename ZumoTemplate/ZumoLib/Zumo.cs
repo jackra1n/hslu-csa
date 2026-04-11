@@ -27,6 +27,7 @@ public class Zumo
         Display = new Display();
 
         Ping = new Ping(Com);
+        Drive = new Drive(Com);
 
         RgbLedRearLeft = new RgbLedRear(Com, LedRear.Left);
         RgbLedRearRight = new RgbLedRear(Com, LedRear.Right);
@@ -34,8 +35,7 @@ public class Zumo
         RedLedRearLeft = new RedLedRear(Com, LedRear.Left);
         RedLedRearRight = new RedLedRear(Com, LedRear.Right);
 
-        // Lidar = new Lidar(Gpio);
-        // Drive = new Drive(Com);
+        Lidar = new Lidar(Gpio);
         // Sound = new Sound(Com);
         // ColorSensor = new ColorSensor(Com);
         // RgbLedFront = new RgbLedFront(Com);
@@ -46,6 +46,7 @@ public class Zumo
     internal ICom Com { get; }
 
     public Ping Ping { get; }
+    public Drive Drive { get; }
 
     public RgbLedRear RgbLedRearLeft { get; }
     public RgbLedRear RgbLedRearRight { get; }
@@ -54,13 +55,12 @@ public class Zumo
     public RedLedRear RedLedRearRight { get; }
 
     public Display Display { get; }
-    public ILed Cm4Led { get; }         
+    public ILed Cm4Led { get; }
     public IButton Cm4Button { get;  }
     public IButton ZumoButton { get; }
 
     // public Sound Sound { get; }
-    // public Drive Drive { get; }
     // public ColorSensor ColorSensor { get; }
     // public RgbLedFront RgbLedFront{ get; }
-    // public Lidar Lidar { get; }
+    public Lidar Lidar { get; }
 }
