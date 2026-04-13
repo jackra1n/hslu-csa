@@ -8,7 +8,7 @@ public class MazeRunner
     private const ushort MoveAcceleration = 256;
 
     private const short TurnAngle = 94;
-    private const short CellSizeMm = 220;
+    private const short CellSizeMm = 230;
 
     private const int FrontBlockedMm = 130;
     private const int SideOpenMm = 160;
@@ -251,69 +251,60 @@ public class MazeRunner
         _heading = Reverse(_heading);
     }
 
+    private double? ComputeWallError(int centerAngle, double tanDelta)
+    {
+        int d1 = MedianLidarReading((centerAngle - AlignOffsetDeg + 360) % 360, 3, 20);
+        int d2 = MedianLidarReading((centerAngle + AlignOffsetDeg) % 360, 3, 20);
+        if (d1 <= 0 || d2 <= 0) return null;
+        double err = Math.Atan((d1 - d2) / ((double)(d1 + d2) * tanDelta)) * 180.0 / Math.PI;
+        Console.WriteLine($"Align @{centerAngle}: d1={d1} d2={d2} err={err:F1}deg");
+        return err;
+    }
+
     private void AlignToWall(CancellationToken cancellationToken)
     {
         int rightCenter = Zumo.Instance.Lidar[90].Distance;
         int leftCenter = Zumo.Instance.Lidar[270].Distance;
-        bool rightValid = rightCenter > 0 && rightCenter <= AlignMaxWallDistMm;
-        bool leftValid = leftCenter > 0 && leftCenter <= AlignMaxWallDistMm;
+        int backCenter = Zumo.Instance.Lidar[180].Distance;
 
-        if (!rightValid && !leftValid)
+        double tanDelta = Math.Tan(AlignOffsetDeg * Math.PI / 180.0);
+        var estimates = new List<double>(3);
+
+        if (rightCenter > 0 && rightCenter <= AlignMaxWallDistMm)
         {
-            Console.WriteLine($"Align skip: no wall (R={rightCenter} L={leftCenter})");
+            double? err = ComputeWallError(90, tanDelta);
+            if (err.HasValue) estimates.Add(err.Value);
+        }
+
+        if (leftCenter > 0 && leftCenter <= AlignMaxWallDistMm)
+        {
+            double? err = ComputeWallError(270, tanDelta);
+            if (err.HasValue) estimates.Add(err.Value);
+        }
+
+        if (backCenter > 0 && backCenter <= AlignMaxWallDistMm)
+        {
+            double? err = ComputeWallError(180, tanDelta);
+            if (err.HasValue) estimates.Add(err.Value);
+        }
+
+        if (estimates.Count == 0)
+        {
+            Console.WriteLine($"Align skip: no wall (R={rightCenter} L={leftCenter} B={backCenter})");
             return;
         }
 
-        double deltaRad = AlignOffsetDeg * Math.PI / 180.0;
-        double tanDelta = Math.Tan(deltaRad);
-        double? rightErr = null;
-        double? leftErr = null;
-
-        if (rightValid)
+        if (estimates.Count >= 2)
         {
-            int rd1 = MedianLidarReading(90 - AlignOffsetDeg, 3, 20);
-            int rd2 = MedianLidarReading(90 + AlignOffsetDeg, 3, 20);
-            if (rd1 > 0 && rd2 > 0)
+            double maxSpread = estimates.Max() - estimates.Min();
+            if (maxSpread > 10.0)
             {
-                rightErr = Math.Atan((rd1 - rd2) / ((double)(rd1 + rd2) * tanDelta)) * 180.0 / Math.PI;
-                Console.WriteLine($"Align R: d1={rd1} d2={rd2} err={rightErr:F1}deg");
-            }
-        }
-
-        if (leftValid)
-        {
-            int ld1 = MedianLidarReading((270 - AlignOffsetDeg + 360) % 360, 3, 20);
-            int ld2 = MedianLidarReading((270 + AlignOffsetDeg) % 360, 3, 20);
-            if (ld1 > 0 && ld2 > 0)
-            {
-                leftErr = Math.Atan((ld1 - ld2) / ((double)(ld1 + ld2) * tanDelta)) * 180.0 / Math.PI;
-                Console.WriteLine($"Align L: d1={ld1} d2={ld2} err={leftErr:F1}deg");
-            }
-        }
-
-        double epsilonDeg;
-        if (rightErr.HasValue && leftErr.HasValue)
-        {
-            if (Math.Abs(rightErr.Value - leftErr.Value) > 10.0)
-            {
-                Console.WriteLine($"Align skip: walls disagree (R={rightErr.Value:F1} L={leftErr.Value:F1})");
+                Console.WriteLine($"Align skip: walls disagree (spread={maxSpread:F1}deg)");
                 return;
             }
-            epsilonDeg = (rightErr.Value + leftErr.Value) / 2.0;
         }
-        else if (rightErr.HasValue)
-        {
-            epsilonDeg = rightErr.Value;
-        }
-        else if (leftErr.HasValue)
-        {
-            epsilonDeg = leftErr.Value;
-        }
-        else
-        {
-            Console.WriteLine("Align skip: no valid offset readings");
-            return;
-        }
+
+        double epsilonDeg = estimates.Average();
 
         if (Math.Abs(epsilonDeg) < AlignMinCorrectionDeg)
             return;
@@ -325,7 +316,7 @@ public class MazeRunner
         }
 
         short correction = (short)Math.Round(epsilonDeg);
-        Console.WriteLine($"Align correct: {correction}deg");
+        Console.WriteLine($"Align correct: {correction}deg (from {estimates.Count} wall(s))");
         DriveTurn(correction, cancellationToken);
     }
 
