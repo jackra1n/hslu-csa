@@ -18,13 +18,21 @@ public class MazeRunner
     private const int SectorStep = 2;
     private const int EmergencyStopSamples = 3;
 
-    private const int MarkerSamples = 3;
+    private const int MarkerSamples = 2;
     private static readonly TimeSpan MarkerCooldown = TimeSpan.FromMilliseconds(800);
     private static readonly TimeSpan PostTurnSensorSettle = TimeSpan.FromMilliseconds(140);
 
     private const int MaxSteps = 320;
 
     private DateTime _lastMarkerTriggerAt = DateTime.MinValue;
+
+    private enum Heading { North, East, South, West }
+
+    private Heading _heading = Heading.South;
+    private int _posX;
+    private int _posY;
+    private readonly Dictionary<(int, int), int> _visitCount = new();
+    private bool _lastMarkerDetected;
 
     public void Run(CancellationToken cancellationToken, bool lidarPrewarmed = false)
     {
@@ -35,6 +43,8 @@ public class MazeRunner
             Zumo.Instance.Lidar.SetPower(true);
             Thread.Sleep(2200);
         }
+
+        RecordVisit();
 
         try
         {
@@ -55,35 +65,44 @@ public class MazeRunner
                     return;
                 }
 
+                Heading rightH = RotateRight(_heading);
+                Heading leftH = RotateLeft(_heading);
+
+                var options = new List<(Direction dir, int visits)>();
                 if (right > SideOpenMm)
-                {
-                    Console.WriteLine("Choice: right opening, turn +90 then one cell.");
-                    SetStatusLed(100, 70, 0);
-                    DriveTurn(TurnAngle, cancellationToken);
-                    Thread.Sleep(PostTurnSensorSettle);
-                    DriveOneCell(cancellationToken);
-                    continue;
-                }
-
+                    options.Add((Direction.Right, GetVisits(CellInDirection(rightH))));
                 if (front > SideOpenMm)
-                {
-                    Console.WriteLine("Choice: forward one cell.");
-                    SetStatusLed(100, 70, 0);
-                    DriveOneCell(cancellationToken);
-                    continue;
-                }
-
+                    options.Add((Direction.Front, GetVisits(CellInDirection(_heading))));
                 if (left > SideOpenMm)
-                {
-                    Console.WriteLine("Choice: left opening, turn -90 then one cell.");
-                    SetStatusLed(100, 70, 0);
-                    DriveTurn(-TurnAngle, cancellationToken);
-                    Thread.Sleep(PostTurnSensorSettle);
-                    DriveOneCell(cancellationToken);
-                    continue;
-                }
+                    options.Add((Direction.Left, GetVisits(CellInDirection(leftH))));
 
-                RecoverFromDeadEnd(cancellationToken);
+                if (options.Count > 0)
+                {
+                    (Direction dir, int visits) best;
+                    if (_lastMarkerDetected)
+                    {
+                        best = options
+                            .OrderByDescending(o =>
+                            {
+                                var (cx, cy) = CellInDirection(HeadingForDirection(o.dir));
+                                return DistanceFromOrigin(cx, cy);
+                            })
+                            .First();
+                        Console.WriteLine($"Marker bias: choosing {best.dir} (outward)");
+                    }
+                    else
+                    {
+                        best = options.OrderBy(o => o.visits).First();
+                        Console.WriteLine($"Choice: {best.dir} (target visits={best.visits})");
+                    }
+
+                    SetStatusLed(100, 70, 0);
+                    ExecuteDirection(best.dir, cancellationToken);
+                }
+                else
+                {
+                    RecoverFromDeadEnd(cancellationToken);
+                }
             }
 
             Console.WriteLine("Maze run stopped after max steps.");
@@ -111,24 +130,7 @@ public class MazeRunner
         Direction direction = ChooseInitialExitDirection(front, right, left);
         Console.WriteLine($"Initial exit: face {direction} (most open).");
 
-        switch (direction)
-        {
-            case Direction.Right:
-                DriveTurn(TurnAngle, cancellationToken);
-                break;
-            case Direction.Left:
-                DriveTurn(-TurnAngle, cancellationToken);
-                break;
-            case Direction.Front:
-                break;
-        }
-
-        if (direction != Direction.Front)
-        {
-            Thread.Sleep(PostTurnSensorSettle);
-        }
-
-        DriveOneCell(cancellationToken);
+        ExecuteDirection(direction, cancellationToken);
     }
 
     private static Direction ChooseInitialExitDirection(int front, int right, int left)
@@ -146,16 +148,39 @@ public class MazeRunner
         return Direction.Front;
     }
 
+    private void ExecuteDirection(Direction dir, CancellationToken cancellationToken)
+    {
+        switch (dir)
+        {
+            case Direction.Right:
+                DriveTurn(TurnAngle, cancellationToken);
+                _heading = RotateRight(_heading);
+                break;
+            case Direction.Left:
+                DriveTurn(-TurnAngle, cancellationToken);
+                _heading = RotateLeft(_heading);
+                break;
+        }
+
+        if (dir != Direction.Front)
+        {
+            Thread.Sleep(PostTurnSensorSettle);
+        }
+
+        DriveOneCell(cancellationToken);
+        AdvancePosition();
+    }
+
     private void DriveOneCell(CancellationToken cancellationToken)
     {
         SetStatusLed(0, 95, 0);
         Console.WriteLine("Drive one cell: 200 mm.");
         DriveTrackWithSafety(CellSizeMm, cancellationToken);
-        CheckForMarker();
+        _lastMarkerDetected = CheckForMarker();
         SetStatusLed(24, 24, 100);
     }
 
-    private void CheckForMarker()
+    private bool CheckForMarker()
     {
         int streak = 0;
         for (int i = 0; i < 5; i++)
@@ -163,11 +188,12 @@ public class MazeRunner
             DetectedColor color = Zumo.Instance.ColorSensor.ReadDetectedColor();
             if (color is DetectedColor.Red or DetectedColor.Green)
             {
+                Console.WriteLine($"Marker detected: {color}");
                 streak++;
                 if (streak >= MarkerSamples)
                 {
                     TriggerMarkerTone();
-                    return;
+                    return true;
                 }
             }
             else
@@ -177,6 +203,8 @@ public class MazeRunner
 
             Thread.Sleep(30);
         }
+
+        return false;
     }
 
     private void TriggerMarkerTone()
@@ -188,7 +216,8 @@ public class MazeRunner
         }
 
         _lastMarkerTriggerAt = now;
-        Zumo.Instance.Sound.Beep(1500, 120);
+        //Zumo.Instance.Sound.Beep(1500, 120);
+        Zumo.Instance.Sound.PlayRandomSound();
     }
 
     private static bool LooksLikeExit(int front, int right, int left)
@@ -208,6 +237,44 @@ public class MazeRunner
     {
         Console.WriteLine("Dead end recovery: turn around.");
         DriveTurn(180, cancellationToken);
+        _heading = Reverse(_heading);
+    }
+
+    private static Heading RotateRight(Heading h) => (Heading)(((int)h + 1) % 4);
+    private static Heading RotateLeft(Heading h) => (Heading)(((int)h + 3) % 4);
+    private static Heading Reverse(Heading h) => (Heading)(((int)h + 2) % 4);
+
+    private Heading HeadingForDirection(Direction dir) => dir switch
+    {
+        Direction.Right => RotateRight(_heading),
+        Direction.Left => RotateLeft(_heading),
+        _ => _heading,
+    };
+
+    private static int DistanceFromOrigin(int x, int y) => Math.Max(Math.Abs(x), Math.Abs(y));
+
+    private (int x, int y) CellInDirection(Heading h) => h switch
+    {
+        Heading.North => (_posX, _posY - 1),
+        Heading.South => (_posX, _posY + 1),
+        Heading.East => (_posX + 1, _posY),
+        Heading.West => (_posX - 1, _posY),
+        _ => (_posX, _posY),
+    };
+
+    private int GetVisits((int x, int y) cell) => _visitCount.GetValueOrDefault(cell);
+
+    private void RecordVisit()
+    {
+        var key = (_posX, _posY);
+        _visitCount[key] = _visitCount.GetValueOrDefault(key) + 1;
+    }
+
+    private void AdvancePosition()
+    {
+        (_posX, _posY) = CellInDirection(_heading);
+        RecordVisit();
+        Console.WriteLine($"Position: ({_posX},{_posY}) heading={_heading} visits={GetVisits((_posX, _posY))}");
     }
 
     private void DriveTrackRaw(short length, CancellationToken cancellationToken)
