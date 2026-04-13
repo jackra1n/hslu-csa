@@ -25,6 +25,14 @@ public class Sound : ComDevice
         return SendSetAndCheck($"1{(int)item:X1}");
     }
 
+    public bool PlayRandomSound()
+    {
+        var items = Enum.GetValues<SoundItem>();
+        var random = new Random();
+        var item = items[random.Next(items.Length)];
+        return Play(item);
+    }
+
     private bool SendSetAndCheck(string payload)
     {
         string response = SetRequest(SoundDispatcher, payload);
