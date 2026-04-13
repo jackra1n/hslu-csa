@@ -141,6 +141,13 @@ class Program
     public static void ButtonChanged2(object? sender, ButtonStateChangedEventArgs args)
     {
         Console.WriteLine("Zumo Button State: " + args.Pressed);
+
+        if (args.Pressed)
+        {
+            SoundItem[] songs = Enum.GetValues<SoundItem>();
+            SoundItem song = songs[Random.Shared.Next(songs.Length)];
+            Zumo.Instance.Sound.Play(song);
+        }
     }
 
     private static void TryRotate(short angle)
