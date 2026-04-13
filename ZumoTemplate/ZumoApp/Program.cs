@@ -26,13 +26,7 @@ class Program
             Console.WriteLine();
             Console.WriteLine("F1   Start maze run (with color calibration)");
             Console.WriteLine("F2   Stop maze run");
-            Console.WriteLine("F3   Turn +90° (manual)");
-            Console.WriteLine("F4   Turn -90° (manual)");
-            Console.WriteLine("F5   Lidar On (manual)");
-            Console.WriteLine("F6   Lidar Off (manual)");
-            Console.WriteLine("F7   Read Color Sensor");
-            Console.WriteLine("F8   Ping Zumo");
-            Console.WriteLine("F9   Toggle Led");
+            Console.WriteLine("F3   Control");
             Console.WriteLine("ESC  Exit");
             ConsoleKeyInfo key = Console.ReadKey();
 
@@ -88,40 +82,7 @@ class Program
                     break;
 
                 case ConsoleKey.F3:
-                    Console.WriteLine("Turning clockwise 90°");
-                    TryRotate(90);
-                    break;
-
-                case ConsoleKey.F4:
-                    Console.WriteLine("Turning counter-clockwise 90°");
-                    TryRotate(-90);
-                    break;
-
-                case ConsoleKey.F5:
-                    Zumo.Instance.Lidar.SetPower(true);
-                    while (!Console.KeyAvailable)
-                    {
-                        LidarPoint p = Zumo.Instance.Lidar[45];
-                        //Console.SetCursorPosition(0, 0);
-                        Console.WriteLine($"Speed {Zumo.Instance.Lidar.Speed} °/sec \tDistance: {p.Distance / 1000f} m    ");
-                        Thread.Sleep(200);
-                    }
-                    break;
-                case ConsoleKey.F6:
-                    Zumo.Instance.Lidar.SetPower(false);
-                    break;
-
-                case ConsoleKey.F7:
-                    ReadColorSensor();
-                    break;
-
-                case ConsoleKey.F8:
-                    bool result = Zumo.Instance.Ping.DoPing();
-                    Console.WriteLine("Ping " + (result ? "OK" : "timeout"));
-                    break;
-
-                case ConsoleKey.F9:
-                    Zumo.Instance.Cm4Led.Toggle();
+                    RunControlMenu();
                     break;
 
                 case ConsoleKey.Escape:
@@ -147,6 +108,69 @@ class Program
             SoundItem[] songs = Enum.GetValues<SoundItem>();
             SoundItem song = songs[Random.Shared.Next(songs.Length)];
             Zumo.Instance.Sound.Play(song);
+        }
+    }
+
+    private static void RunControlMenu()
+    {
+        while (true)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Control Menu");
+            Console.WriteLine("F1   Turn +90°");
+            Console.WriteLine("F2   Turn -90°");
+            Console.WriteLine("F3   Lidar On");
+            Console.WriteLine("F4   Lidar Off");
+            Console.WriteLine("F5   Read Color Sensor");
+            Console.WriteLine("F6   Ping Zumo");
+            Console.WriteLine("F7   Toggle Led");
+            Console.WriteLine("ESC  Back");
+
+            ConsoleKeyInfo key = Console.ReadKey();
+
+            switch (key.Key)
+            {
+                case ConsoleKey.F1:
+                    Console.WriteLine("Turning clockwise 90°");
+                    TryRotate(90);
+                    break;
+
+                case ConsoleKey.F2:
+                    Console.WriteLine("Turning counter-clockwise 90°");
+                    TryRotate(-90);
+                    break;
+
+                case ConsoleKey.F3:
+                    Zumo.Instance.Lidar.SetPower(true);
+                    while (!Console.KeyAvailable)
+                    {
+                        LidarPoint p = Zumo.Instance.Lidar[45];
+                        Console.WriteLine($"Speed {Zumo.Instance.Lidar.Speed} °/sec \tDistance: {p.Distance / 1000f} m    ");
+                        Thread.Sleep(200);
+                    }
+                    Console.ReadKey(intercept: true);
+                    break;
+
+                case ConsoleKey.F4:
+                    Zumo.Instance.Lidar.SetPower(false);
+                    break;
+
+                case ConsoleKey.F5:
+                    ReadColorSensor();
+                    break;
+
+                case ConsoleKey.F6:
+                    bool result = Zumo.Instance.Ping.DoPing();
+                    Console.WriteLine("Ping " + (result ? "OK" : "timeout"));
+                    break;
+
+                case ConsoleKey.F7:
+                    Zumo.Instance.Cm4Led.Toggle();
+                    break;
+
+                case ConsoleKey.Escape:
+                    return;
+            }
         }
     }
 
