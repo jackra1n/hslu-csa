@@ -18,3 +18,19 @@ The labyrinth is mapped to an `11x11` matrix. In this layout, the colored floor 
 #  .  #  #  #  .  #  #  #  .  #
 .  O  .  .  .  .  .  .  .  O  #
 #  #  #  #  #  #  #  #  #  .  #
+```
+
+Different example:
+```text
+#  .  #  #  #  #  #  #  #  #  #
+#  O  .  .  .  .  .  .  .  O  .
+#  .  #  #  #  .  #  #  #  .  #
+#  .  #  .  .  R  .  .  #  .  #
+#  .  #  .  #  #  #  .  #  .  #
+#  .  .  O  #  v  #  O  .  .  #
+#  .  #  .  #  .  #  .  #  .  #
+#  .  #  .  .  .  .  .  #  .  #
+#  .  #  #  #  #  #  #  #  .  #
+.  G  .  .  .  .  .  .  .  O  #
+#  #  #  #  #  #  #  #  #  .  #
+```
