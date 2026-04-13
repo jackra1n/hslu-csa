@@ -7,8 +7,8 @@ public class MazeRunner
     private const ushort MoveSpeed = 128;
     private const ushort MoveAcceleration = 256;
 
-    private const short TurnAngle = 93;
-    private const short CellSizeMm = 210;
+    private const short TurnAngle = 94;
+    private const short CellSizeMm = 220;
 
     private const int FrontBlockedMm = 130;
     private const int SideOpenMm = 160;
