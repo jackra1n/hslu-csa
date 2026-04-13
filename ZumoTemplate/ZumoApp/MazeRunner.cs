@@ -22,6 +22,11 @@ public class MazeRunner
     private static readonly TimeSpan MarkerCooldown = TimeSpan.FromMilliseconds(800);
     private static readonly TimeSpan PostTurnSensorSettle = TimeSpan.FromMilliseconds(140);
 
+    private const int AlignOffsetDeg = 20;
+    private const double AlignMinCorrectionDeg = 1.0;
+    private const double AlignMaxCorrectionDeg = 15.0;
+    private const int AlignMaxWallDistMm = 300;
+
     private const int MaxSteps = 320;
 
     private DateTime _lastMarkerTriggerAt = DateTime.MinValue;
@@ -165,6 +170,8 @@ public class MazeRunner
         if (dir != Direction.Front)
         {
             Thread.Sleep(PostTurnSensorSettle);
+            AlignToWall(cancellationToken);
+            Thread.Sleep(PostTurnSensorSettle);
         }
 
         DriveOneCell(cancellationToken);
@@ -238,6 +245,54 @@ public class MazeRunner
         Console.WriteLine("Dead end recovery: turn around.");
         DriveTurn(180, cancellationToken);
         _heading = Reverse(_heading);
+    }
+
+    private void AlignToWall(CancellationToken cancellationToken)
+    {
+        int rightCenter = Zumo.Instance.Lidar[90].Distance;
+        int leftCenter = Zumo.Instance.Lidar[270].Distance;
+
+        int wallAngle;
+        if (rightCenter > 0 && rightCenter <= AlignMaxWallDistMm &&
+            (leftCenter <= 0 || rightCenter <= leftCenter))
+            wallAngle = 90;
+        else if (leftCenter > 0 && leftCenter <= AlignMaxWallDistMm)
+            wallAngle = 270;
+        else
+        {
+            Console.WriteLine($"Align skip: no wall (R={rightCenter} L={leftCenter})");
+            return;
+        }
+
+        int d1 = Zumo.Instance.Lidar[(wallAngle - AlignOffsetDeg + 360) % 360].Distance;
+        int d2 = Zumo.Instance.Lidar[(wallAngle + AlignOffsetDeg) % 360].Distance;
+
+        if (d1 <= 0 || d2 <= 0)
+        {
+            Console.WriteLine($"Align skip: invalid offsets (wall@{wallAngle} d1={d1} d2={d2})");
+            return;
+        }
+
+        double deltaRad = AlignOffsetDeg * Math.PI / 180.0;
+        double epsilonRad = Math.Atan((d1 - d2) / ((double)(d1 + d2) * Math.Tan(deltaRad)));
+        double epsilonDeg = epsilonRad * 180.0 / Math.PI;
+
+        if (wallAngle == 270) epsilonDeg = -epsilonDeg;
+
+        Console.WriteLine($"Align: wall@{wallAngle} d1={d1} d2={d2} err={epsilonDeg:F1}deg");
+
+        if (Math.Abs(epsilonDeg) < AlignMinCorrectionDeg)
+            return;
+
+        if (Math.Abs(epsilonDeg) > AlignMaxCorrectionDeg)
+        {
+            Console.WriteLine($"Align skip: correction too large ({epsilonDeg:F1}deg)");
+            return;
+        }
+
+        short correction = (short)Math.Round(epsilonDeg);
+        Console.WriteLine($"Align correct: {correction}deg");
+        DriveTurn(correction, cancellationToken);
     }
 
     private static Heading RotateRight(Heading h) => (Heading)(((int)h + 1) % 4);
