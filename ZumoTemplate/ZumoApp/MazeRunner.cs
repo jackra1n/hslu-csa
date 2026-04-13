@@ -13,9 +13,9 @@ public class MazeRunner
     private const short RecoveryBacktrackMillimeters = -90;
     private const short MaxForwardChunkMillimeters = 150;
 
-    private const int FrontBlockedThresholdMillimeters = 170;
-    private const int FrontClearThresholdMillimeters = 280;
-    private const int SideOpeningThresholdMillimeters = 320;
+    private const int FrontBlockedThresholdMillimeters = 120;
+    private const int FrontClearThresholdMillimeters = 160;
+    private const int SideOpeningThresholdMillimeters = 160;
     private const int ExitThresholdMillimeters = 1250;
 
     private const int FrontSectorHalfWidthDegrees = 8;
