@@ -90,7 +90,7 @@ public class Lidar
             pwm.DutyCycle = 0.5;
             pwm.Start();
             Thread.Sleep(100);
-            pwm.DutyCycle = 0.84;
+            pwm.DutyCycle = 0.25;
             Thread.Sleep(100);
             pwm.Stop();
             Console.WriteLine("Lidar configured");
