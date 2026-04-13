@@ -27,6 +27,10 @@ public class MazeRunner
     private const double AlignMaxCorrectionDeg = 15.0;
     private const int AlignMaxWallDistMm = 300;
 
+    private const int SideTooCloseMm = 80;
+    private const int SideDriftMinDiffMm = 30;
+    private const int MaxMidDriveCorrections = 2;
+
     private const int MaxSteps = 320;
 
     private DateTime _lastMarkerTriggerAt = DateTime.MinValue;
@@ -251,35 +255,65 @@ public class MazeRunner
     {
         int rightCenter = Zumo.Instance.Lidar[90].Distance;
         int leftCenter = Zumo.Instance.Lidar[270].Distance;
+        bool rightValid = rightCenter > 0 && rightCenter <= AlignMaxWallDistMm;
+        bool leftValid = leftCenter > 0 && leftCenter <= AlignMaxWallDistMm;
 
-        int wallAngle;
-        if (rightCenter > 0 && rightCenter <= AlignMaxWallDistMm &&
-            (leftCenter <= 0 || rightCenter <= leftCenter))
-            wallAngle = 90;
-        else if (leftCenter > 0 && leftCenter <= AlignMaxWallDistMm)
-            wallAngle = 270;
-        else
+        if (!rightValid && !leftValid)
         {
             Console.WriteLine($"Align skip: no wall (R={rightCenter} L={leftCenter})");
             return;
         }
 
-        int d1 = Zumo.Instance.Lidar[(wallAngle - AlignOffsetDeg + 360) % 360].Distance;
-        int d2 = Zumo.Instance.Lidar[(wallAngle + AlignOffsetDeg) % 360].Distance;
+        double deltaRad = AlignOffsetDeg * Math.PI / 180.0;
+        double tanDelta = Math.Tan(deltaRad);
+        double? rightErr = null;
+        double? leftErr = null;
 
-        if (d1 <= 0 || d2 <= 0)
+        if (rightValid)
         {
-            Console.WriteLine($"Align skip: invalid offsets (wall@{wallAngle} d1={d1} d2={d2})");
-            return;
+            int rd1 = MedianLidarReading(90 - AlignOffsetDeg, 3, 20);
+            int rd2 = MedianLidarReading(90 + AlignOffsetDeg, 3, 20);
+            if (rd1 > 0 && rd2 > 0)
+            {
+                rightErr = Math.Atan((rd1 - rd2) / ((double)(rd1 + rd2) * tanDelta)) * 180.0 / Math.PI;
+                Console.WriteLine($"Align R: d1={rd1} d2={rd2} err={rightErr:F1}deg");
+            }
         }
 
-        double deltaRad = AlignOffsetDeg * Math.PI / 180.0;
-        double epsilonRad = Math.Atan((d1 - d2) / ((double)(d1 + d2) * Math.Tan(deltaRad)));
-        double epsilonDeg = epsilonRad * 180.0 / Math.PI;
+        if (leftValid)
+        {
+            int ld1 = MedianLidarReading((270 - AlignOffsetDeg + 360) % 360, 3, 20);
+            int ld2 = MedianLidarReading((270 + AlignOffsetDeg) % 360, 3, 20);
+            if (ld1 > 0 && ld2 > 0)
+            {
+                leftErr = Math.Atan((ld1 - ld2) / ((double)(ld1 + ld2) * tanDelta)) * 180.0 / Math.PI;
+                Console.WriteLine($"Align L: d1={ld1} d2={ld2} err={leftErr:F1}deg");
+            }
+        }
 
-        if (wallAngle == 270) epsilonDeg = -epsilonDeg;
-
-        Console.WriteLine($"Align: wall@{wallAngle} d1={d1} d2={d2} err={epsilonDeg:F1}deg");
+        double epsilonDeg;
+        if (rightErr.HasValue && leftErr.HasValue)
+        {
+            if (Math.Abs(rightErr.Value - leftErr.Value) > 10.0)
+            {
+                Console.WriteLine($"Align skip: walls disagree (R={rightErr.Value:F1} L={leftErr.Value:F1})");
+                return;
+            }
+            epsilonDeg = (rightErr.Value + leftErr.Value) / 2.0;
+        }
+        else if (rightErr.HasValue)
+        {
+            epsilonDeg = rightErr.Value;
+        }
+        else if (leftErr.HasValue)
+        {
+            epsilonDeg = leftErr.Value;
+        }
+        else
+        {
+            Console.WriteLine("Align skip: no valid offset readings");
+            return;
+        }
 
         if (Math.Abs(epsilonDeg) < AlignMinCorrectionDeg)
             return;
@@ -351,7 +385,8 @@ public class MazeRunner
             return false;
         }
 
-        return WaitDriveFinished(cancellationToken, monitorFrontSafety: true);
+        return WaitDriveFinished(cancellationToken, monitorFrontSafety: true,
+                                midDriveCorrectionsLeft: MaxMidDriveCorrections);
     }
 
     private void DriveTurn(short angle, CancellationToken cancellationToken)
@@ -365,10 +400,12 @@ public class MazeRunner
         WaitDriveFinished(cancellationToken, monitorFrontSafety: false);
     }
 
-    private bool WaitDriveFinished(CancellationToken cancellationToken, bool monitorFrontSafety)
+    private bool WaitDriveFinished(CancellationToken cancellationToken, bool monitorFrontSafety,
+                                   int midDriveCorrectionsLeft = 0)
     {
         DateTime timeout = DateTime.UtcNow.AddSeconds(6);
         int consecutiveBlocked = 0;
+        int consecutiveDrift = 0;
         bool stoppedBySafety = false;
 
         while (Zumo.Instance.Drive.DriveIsRunning())
@@ -392,6 +429,40 @@ public class MazeRunner
                 {
                     consecutiveBlocked = 0;
                 }
+
+                if (!stoppedBySafety && midDriveCorrectionsLeft > 0)
+                {
+                    int rDist = Zumo.Instance.Lidar[90].Distance;
+                    int lDist = Zumo.Instance.Lidar[270].Distance;
+                    bool rClose = rDist > 0 && rDist < SideTooCloseMm;
+                    bool lClose = lDist > 0 && lDist < SideTooCloseMm;
+
+                    if ((rClose || lClose) && Math.Abs(rDist - lDist) > SideDriftMinDiffMm)
+                    {
+                        consecutiveDrift++;
+                        if (consecutiveDrift >= 2)
+                        {
+                            Zumo.Instance.Drive.Stop();
+                            short remaining = Zumo.Instance.Drive.GetRemainingDistance();
+                            Console.WriteLine($"Drift stop: R={rDist} L={lDist} remaining={remaining}mm");
+                            AlignToWall(cancellationToken);
+                            if (remaining > 20)
+                            {
+                                Zumo.Instance.Drive.DriveTrack(remaining, MoveSpeed, MoveAcceleration);
+                                midDriveCorrectionsLeft--;
+                                consecutiveDrift = 0;
+                                consecutiveBlocked = 0;
+                                timeout = DateTime.UtcNow.AddSeconds(6);
+                                continue;
+                            }
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        consecutiveDrift = 0;
+                    }
+                }
             }
 
             if (DateTime.UtcNow > timeout)
@@ -404,6 +475,20 @@ public class MazeRunner
         }
 
         return !stoppedBySafety;
+    }
+
+    private static int MedianLidarReading(int angle, int samples, int delayMs)
+    {
+        var vals = new List<int>(samples);
+        for (int i = 0; i < samples; i++)
+        {
+            int d = Zumo.Instance.Lidar[angle].Distance;
+            if (d > 0) vals.Add(d);
+            if (i < samples - 1) Thread.Sleep(delayMs);
+        }
+        if (vals.Count == 0) return 0;
+        vals.Sort();
+        return vals[vals.Count / 2];
     }
 
     private static int GetSectorClearance(int centerAngle, int halfWidth)
