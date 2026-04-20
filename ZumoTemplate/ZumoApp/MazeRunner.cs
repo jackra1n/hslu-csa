@@ -27,10 +27,6 @@ public class MazeRunner
     private const double AlignMaxCorrectionDeg = 15.0;
     private const int AlignMaxWallDistMm = 300;
 
-    private const int SideTooCloseMm = 80;
-    private const int SideDriftMinDiffMm = 30;
-    private const int MaxMidDriveCorrections = 2;
-
     private const int MaxSteps = 320;
 
     private DateTime _lastMarkerTriggerAt = DateTime.MinValue;
@@ -185,8 +181,8 @@ public class MazeRunner
     private void DriveOneCell(CancellationToken cancellationToken)
     {
         SetStatusLed(0, 95, 0);
-        Console.WriteLine("Drive one cell: 200 mm.");
-        DriveTrackWithSafety(CellSizeMm, cancellationToken);
+        Console.WriteLine("Drive one cell (LiDAR corrected): 230 mm.");
+        new CorridorDriver().Drive(CellSizeMm, MoveSpeed, cancellationToken);
         _lastMarkerDetected = CheckForMarker();
         SetStatusLed(24, 24, 100);
     }
@@ -376,8 +372,7 @@ public class MazeRunner
             return false;
         }
 
-        return WaitDriveFinished(cancellationToken, monitorFrontSafety: true,
-                                midDriveCorrectionsLeft: MaxMidDriveCorrections);
+        return WaitDriveFinished(cancellationToken, monitorFrontSafety: true);
     }
 
     private void DriveTurn(short angle, CancellationToken cancellationToken)
@@ -391,12 +386,10 @@ public class MazeRunner
         WaitDriveFinished(cancellationToken, monitorFrontSafety: false);
     }
 
-    private bool WaitDriveFinished(CancellationToken cancellationToken, bool monitorFrontSafety,
-                                   int midDriveCorrectionsLeft = 0)
+    private bool WaitDriveFinished(CancellationToken cancellationToken, bool monitorFrontSafety)
     {
         DateTime timeout = DateTime.UtcNow.AddSeconds(6);
         int consecutiveBlocked = 0;
-        int consecutiveDrift = 0;
         bool stoppedBySafety = false;
 
         while (Zumo.Instance.Drive.DriveIsRunning())
@@ -419,40 +412,6 @@ public class MazeRunner
                 else
                 {
                     consecutiveBlocked = 0;
-                }
-
-                if (!stoppedBySafety && midDriveCorrectionsLeft > 0)
-                {
-                    int rDist = Zumo.Instance.Lidar[90].Distance;
-                    int lDist = Zumo.Instance.Lidar[270].Distance;
-                    bool rClose = rDist > 0 && rDist < SideTooCloseMm;
-                    bool lClose = lDist > 0 && lDist < SideTooCloseMm;
-
-                    if ((rClose || lClose) && Math.Abs(rDist - lDist) > SideDriftMinDiffMm)
-                    {
-                        consecutiveDrift++;
-                        if (consecutiveDrift >= 2)
-                        {
-                            Zumo.Instance.Drive.Stop();
-                            short remaining = Zumo.Instance.Drive.GetRemainingDistance();
-                            Console.WriteLine($"Drift stop: R={rDist} L={lDist} remaining={remaining}mm");
-                            AlignToWall(cancellationToken);
-                            if (remaining > 20)
-                            {
-                                Zumo.Instance.Drive.DriveTrack(remaining, MoveSpeed, MoveAcceleration);
-                                midDriveCorrectionsLeft--;
-                                consecutiveDrift = 0;
-                                consecutiveBlocked = 0;
-                                timeout = DateTime.UtcNow.AddSeconds(6);
-                                continue;
-                            }
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        consecutiveDrift = 0;
-                    }
                 }
             }
 
