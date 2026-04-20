@@ -124,6 +124,7 @@ class Program
             Console.WriteLine("F5   Read Color Sensor");
             Console.WriteLine("F6   Ping Zumo");
             Console.WriteLine("F7   Toggle Led");
+            Console.WriteLine("F8   Drive 30cm (LiDAR corrected)");
             Console.WriteLine("ESC  Back");
 
             ConsoleKeyInfo key = Console.ReadKey();
@@ -168,6 +169,10 @@ class Program
                     Zumo.Instance.Cm4Led.Toggle();
                     break;
 
+                case ConsoleKey.F8:
+                    RunCorridorDrive();
+                    break;
+
                 case ConsoleKey.Escape:
                     return;
             }
@@ -195,6 +200,32 @@ class Program
         {
             Console.WriteLine($"Color sensor hue invalid, detected: {color}");
         }
+    }
+
+    private static void RunCorridorDrive()
+    {
+        Zumo.Instance.Lidar.SetPower(true);
+        Console.WriteLine("Waiting for LiDAR to stabilize...");
+        Thread.Sleep(2200);
+
+        Console.WriteLine("Driving 30cm with LiDAR correction (press any key to cancel)...");
+        var cts = new CancellationTokenSource();
+        Task.Run(() =>
+        {
+            Console.ReadKey(true);
+            cts.Cancel();
+        });
+
+        try
+        {
+            new CorridorDriver().Drive(300, 128, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("Corridor drive canceled by user.");
+        }
+
+        cts.Dispose();
     }
 
     private static void RunColorCalibrationStep(bool blackReference)
