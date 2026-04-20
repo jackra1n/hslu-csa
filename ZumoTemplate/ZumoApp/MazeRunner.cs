@@ -7,8 +7,8 @@ public class MazeRunner
     private const ushort MoveSpeed = 128;
     private const ushort MoveAcceleration = 256;
 
-    private const short TurnAngle = 94;
-    private const short CellSizeMm = 230;
+    private const short TurnAngle = 93;
+    private const short CellSizeMm = 220;
 
     private const int FrontBlockedMm = 130;
     private const int SideOpenMm = 160;
@@ -41,7 +41,10 @@ public class MazeRunner
     private int _posX;
     private int _posY;
     private readonly Dictionary<(int, int), int> _visitCount = new();
-    private bool _lastMarkerDetected;
+    private DetectedColor? _lastMarkerColor;
+    private int _consecutiveLeftTurns;
+    private bool _forceExtraDistance;
+    private bool _greenFound;
 
     public void Run(CancellationToken cancellationToken, bool lidarPrewarmed = false)
     {
@@ -57,7 +60,6 @@ public class MazeRunner
 
         try
         {
-            HandleInitialExit(cancellationToken);
             for (int step = 0; step < MaxSteps; step++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -74,8 +76,43 @@ public class MazeRunner
                     return;
                 }
 
+                if (_lastMarkerColor == DetectedColor.Green)
+                {
+                    _greenFound = true;
+                    _lastMarkerColor = null;
+                    Console.WriteLine("Green marker found: navigating to exit using lidar.");
+                }
+
+                if (_lastMarkerColor == DetectedColor.Red)
+                {
+                    _lastMarkerColor = null;
+                    _consecutiveLeftTurns = 2;
+                    _forceExtraDistance = true;
+                    Console.WriteLine("Red marker: will force 2 left turns into outer corridor.");
+                }
+
                 Heading rightH = RotateRight(_heading);
                 Heading leftH = RotateLeft(_heading);
+
+                if (_consecutiveLeftTurns > 0)
+                {
+                    _consecutiveLeftTurns--;
+                    _forceExtraDistance = true;
+                    Console.WriteLine($"Forced left turn ({_consecutiveLeftTurns} remaining).");
+                    SetStatusLed(100, 70, 0);
+                    if (left > SideOpenMm)
+                        ExecuteDirection(Direction.Left, cancellationToken);
+                    else if (front > SideOpenMm)
+                        ExecuteDirection(Direction.Front, cancellationToken);
+                    else if (right > SideOpenMm)
+                        ExecuteDirection(Direction.Right, cancellationToken);
+                    else
+                        RecoverFromDeadEnd(cancellationToken);
+                    _forceExtraDistance = false;
+                    Thread.Sleep(PostTurnSensorSettle);
+                    AlignToWall(cancellationToken);
+                    continue;
+                }
 
                 var options = new List<(Direction dir, int visits)>();
                 if (right > SideOpenMm)
@@ -87,24 +124,8 @@ public class MazeRunner
 
                 if (options.Count > 0)
                 {
-                    (Direction dir, int visits) best;
-                    if (_lastMarkerDetected)
-                    {
-                        best = options
-                            .OrderByDescending(o =>
-                            {
-                                var (cx, cy) = CellInDirection(HeadingForDirection(o.dir));
-                                return DistanceFromOrigin(cx, cy);
-                            })
-                            .First();
-                        Console.WriteLine($"Marker bias: choosing {best.dir} (outward)");
-                    }
-                    else
-                    {
-                        best = options.OrderBy(o => o.visits).First();
-                        Console.WriteLine($"Choice: {best.dir} (target visits={best.visits})");
-                    }
-
+                    var best = options.OrderBy(o => o.visits).First();
+                    Console.WriteLine($"Choice: {best.dir} (target visits={best.visits})");
                     SetStatusLed(100, 70, 0);
                     ExecuteDirection(best.dir, cancellationToken);
                 }
@@ -127,34 +148,6 @@ public class MazeRunner
             SetStatusLed(0, 0, 0);
             Zumo.Instance.Lidar.SetPower(false);
         }
-    }
-
-    private void HandleInitialExit(CancellationToken cancellationToken)
-    {
-        int front = GetSectorClearance(0, SectorHalfWidth);
-        int right = GetSectorClearance(90, SectorHalfWidth);
-        int left = GetSectorClearance(270, SectorHalfWidth);
-
-        Console.WriteLine($"step=INIT front={front} right={right} left={left}");
-        Direction direction = ChooseInitialExitDirection(front, right, left);
-        Console.WriteLine($"Initial exit: face {direction} (most open).");
-
-        ExecuteDirection(direction, cancellationToken);
-    }
-
-    private static Direction ChooseInitialExitDirection(int front, int right, int left)
-    {
-        if (right >= left && right >= front)
-        {
-            return Direction.Right;
-        }
-
-        if (left >= front)
-        {
-            return Direction.Left;
-        }
-
-        return Direction.Front;
     }
 
     private void ExecuteDirection(Direction dir, CancellationToken cancellationToken)
@@ -186,25 +179,52 @@ public class MazeRunner
     {
         SetStatusLed(0, 95, 0);
         Console.WriteLine("Drive one cell: 200 mm.");
-        DriveTrackWithSafety(CellSizeMm, cancellationToken);
-        _lastMarkerDetected = CheckForMarker();
+
+        const short ProbeDistance = 180;
+        const short BackupDistance = 20;
+        const int maxTries = 3;
+
+        DriveTrackWithSafety(ProbeDistance, cancellationToken);
+
+        DetectedColor? color = null;
+        for (int attempt = 0; attempt < maxTries && color == null; attempt++)
+        {
+            color = CheckForMarker();
+            if (color == null && attempt < maxTries - 1)
+            {
+                Console.WriteLine($"Color scan try {attempt + 1} miss, backing up {BackupDistance} mm.");
+                Zumo.Instance.Drive.Stop();
+                DriveTrackRaw((short)-BackupDistance, cancellationToken);
+                Thread.Sleep(150);
+                DriveTrackRaw(BackupDistance, cancellationToken);
+                Thread.Sleep(150);
+            }
+        }
+
+        _lastMarkerColor = color;
+        short extraDist = _forceExtraDistance ? (short)30 : (short)0;
+        if (extraDist > 0)
+            Console.WriteLine($"Extra distance: +{extraDist} mm");
+        DriveTrackWithSafety((short)(CellSizeMm - ProbeDistance + extraDist), cancellationToken);
         SetStatusLed(24, 24, 100);
     }
 
-    private bool CheckForMarker()
+    private DetectedColor? CheckForMarker()
     {
         int streak = 0;
+        DetectedColor? seen = null;
         for (int i = 0; i < 5; i++)
         {
             DetectedColor color = Zumo.Instance.ColorSensor.ReadDetectedColor();
             if (color is DetectedColor.Red or DetectedColor.Green)
             {
                 Console.WriteLine($"Marker detected: {color}");
+                seen = color;
                 streak++;
                 if (streak >= MarkerSamples)
                 {
                     TriggerMarkerTone();
-                    return true;
+                    return seen;
                 }
             }
             else
@@ -215,7 +235,7 @@ public class MazeRunner
             Thread.Sleep(30);
         }
 
-        return false;
+        return null;
     }
 
     private void TriggerMarkerTone()
@@ -420,41 +440,6 @@ public class MazeRunner
                 {
                     consecutiveBlocked = 0;
                 }
-
-                if (!stoppedBySafety && midDriveCorrectionsLeft > 0)
-                {
-                    int rDist = Zumo.Instance.Lidar[90].Distance;
-                    int lDist = Zumo.Instance.Lidar[270].Distance;
-                    bool rClose = rDist > 0 && rDist < SideTooCloseMm;
-                    bool lClose = lDist > 0 && lDist < SideTooCloseMm;
-
-                    if ((rClose || lClose) && Math.Abs(rDist - lDist) > SideDriftMinDiffMm)
-                    {
-                        consecutiveDrift++;
-                        if (consecutiveDrift >= 2)
-                        {
-                            Zumo.Instance.Drive.Stop();
-                            short remaining = Zumo.Instance.Drive.GetRemainingDistance();
-                            Console.WriteLine($"Drift stop: R={rDist} L={lDist} remaining={remaining}mm");
-                            AlignToWall(cancellationToken);
-                            if (remaining > 20)
-                            {
-                                Zumo.Instance.Drive.DriveTrack(remaining, MoveSpeed, MoveAcceleration);
-                                midDriveCorrectionsLeft--;
-                                consecutiveDrift = 0;
-                                consecutiveBlocked = 0;
-                                timeout = DateTime.UtcNow.AddSeconds(6);
-                                continue;
-                            }
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        consecutiveDrift = 0;
-                    }
-                }
-            }
 
             if (DateTime.UtcNow > timeout)
             {
