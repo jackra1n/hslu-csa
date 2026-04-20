@@ -124,7 +124,7 @@ class Program
             Console.WriteLine("F5   Read Color Sensor");
             Console.WriteLine("F6   Ping Zumo");
             Console.WriteLine("F7   Toggle Led");
-            Console.WriteLine("F8   Drive 50cm (LiDAR corrected)");
+            Console.WriteLine("F8   Drive N cm (LiDAR corrected)");
             Console.WriteLine("ESC  Back");
 
             ConsoleKeyInfo key = Console.ReadKey();
@@ -204,11 +204,20 @@ class Program
 
     private static void RunCorridorDrive()
     {
+        Console.WriteLine("Enter distance in cm (e.g. 30):");
+        string? line = Console.ReadLine();
+        if (!int.TryParse(line, out int distanceCm) || distanceCm <= 0)
+        {
+            Console.WriteLine("Invalid distance.");
+            return;
+        }
+
         Zumo.Instance.Lidar.SetPower(true);
         Console.WriteLine("Waiting for LiDAR to stabilize...");
         Thread.Sleep(2200);
 
-        Console.WriteLine("Driving 50cm with LiDAR correction (press any key to cancel)...");
+        int distanceMm = distanceCm * 10;
+        Console.WriteLine($"Driving {distanceCm}cm with LiDAR correction (press any key to cancel)...");
         var cts = new CancellationTokenSource();
         Task.Run(() =>
         {
@@ -218,7 +227,7 @@ class Program
 
         try
         {
-            new CorridorDriver().Drive(500, 128, cts.Token);
+            new CorridorDriver().Drive(distanceMm, 128, cts.Token);
         }
         catch (OperationCanceledException)
         {
