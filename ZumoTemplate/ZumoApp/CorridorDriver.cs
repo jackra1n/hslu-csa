@@ -8,6 +8,8 @@ public class CorridorDriver
     private const double CenteringGain = 0.4;
     private const int MaxCorrectionSpeed = 40;
     private const int NoWallThresholdMm = 300;
+    private const int BothWallsFarThresholdMm = 600;
+    private const int HysteresisIterations = 3;
     private const int FrontStopMm = 120;
     private const int FrontSectorHalfWidth = 15;
     private const int SideSectorHalfWidth = 7;
@@ -23,7 +25,7 @@ public class CorridorDriver
 
         int rightInit = GetSideSectorClearance(45);
         int leftInit = GetSideSectorClearance(315);
-        sbyte initialOffset = ComputeOffset(rightInit, leftInit);
+        sbyte initialOffset = ComputeOffsetRaw(rightInit, leftInit);
         Console.WriteLine($"  initial offset={initialOffset} (R={rightInit} L={leftInit})");
 
         Zumo.Instance.Drive.ConstantSpeed(
@@ -33,6 +35,7 @@ public class CorridorDriver
         var stopwatch = Stopwatch.StartNew();
         int iteration = 0;
         int lastPrintedIter = -1;
+        int consecutiveZeroOffset = 0;
 
         try
         {
@@ -58,7 +61,24 @@ public class CorridorDriver
                 int rightDist = GetSideSectorClearance(45);
                 int leftDist = GetSideSectorClearance(315);
 
-                sbyte offset = ComputeOffset(rightDist, leftDist);
+                sbyte rawOffset = ComputeOffsetRaw(rightDist, leftDist);
+
+                sbyte offset;
+                if (rawOffset == 0)
+                {
+                    consecutiveZeroOffset++;
+                    offset = 0;
+                }
+                else if (consecutiveZeroOffset < HysteresisIterations)
+                {
+                    offset = 0;
+                    consecutiveZeroOffset++;
+                }
+                else
+                {
+                    offset = rawOffset;
+                    consecutiveZeroOffset = 0;
+                }
 
                 if (iteration > StartupGraceIterations)
                 {
@@ -90,19 +110,19 @@ public class CorridorDriver
         }
     }
 
-    private static sbyte ComputeOffset(int rightDist, int leftDist)
+    private static sbyte ComputeOffsetRaw(int rightDist, int leftDist)
     {
-        bool rTooFar = rightDist == 0 || rightDist > NoWallThresholdMm;
-        bool lTooFar = leftDist == 0 || leftDist > NoWallThresholdMm;
+        bool rFar = rightDist == 0 || rightDist > BothWallsFarThresholdMm;
+        bool lFar = leftDist == 0 || leftDist > BothWallsFarThresholdMm;
 
-        if (rTooFar && lTooFar) return 0;
+        if (rFar && lFar) return 0;
 
         int diff;
-        if (rTooFar)
+        if (rFar)
         {
             diff = -leftDist;
         }
-        else if (lTooFar)
+        else if (lFar)
         {
             diff = rightDist;
         }
