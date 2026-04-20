@@ -14,7 +14,7 @@ public class CorridorDriver
     private const int SideSectorStep = 2;
     private const int PollIntervalMs = 30;
     private const int StartupGraceIterations = 7;
-    private const double FudgeFactor = 1.0;
+    private const double FudgeFactor = 1.036;
 
     public void Drive(int distanceMm, ushort baseSpeed, CancellationToken ct)
     {
