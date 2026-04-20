@@ -124,7 +124,7 @@ class Program
             Console.WriteLine("F5   Read Color Sensor");
             Console.WriteLine("F6   Ping Zumo");
             Console.WriteLine("F7   Toggle Led");
-            Console.WriteLine("F8   Drive 30cm (LiDAR corrected)");
+            Console.WriteLine("F8   Drive 50cm (LiDAR corrected)");
             Console.WriteLine("ESC  Back");
 
             ConsoleKeyInfo key = Console.ReadKey();
@@ -208,7 +208,7 @@ class Program
         Console.WriteLine("Waiting for LiDAR to stabilize...");
         Thread.Sleep(2200);
 
-        Console.WriteLine("Driving 30cm with LiDAR correction (press any key to cancel)...");
+        Console.WriteLine("Driving 50cm with LiDAR correction (press any key to cancel)...");
         var cts = new CancellationTokenSource();
         Task.Run(() =>
         {
@@ -218,7 +218,7 @@ class Program
 
         try
         {
-            new CorridorDriver().Drive(300, 128, cts.Token);
+            new CorridorDriver().Drive(500, 128, cts.Token);
         }
         catch (OperationCanceledException)
         {

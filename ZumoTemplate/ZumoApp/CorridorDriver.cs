@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ZumoLib;
 
 namespace ZumoApp;
@@ -6,30 +7,39 @@ public class CorridorDriver
 {
     private const double CenteringGain = 0.4;
     private const int MaxCorrectionSpeed = 40;
-    private const int SideIgnoreNoWallMm = 600;
+    private const int NoWallThresholdMm = 300;
     private const int FrontStopMm = 120;
     private const int FrontSectorHalfWidth = 15;
     private const int SideSectorHalfWidth = 7;
     private const int SideSectorStep = 2;
     private const int PollIntervalMs = 30;
+    private const int StartupGraceIterations = 7;
+    private const double FudgeFactor = 1.0;
 
     public void Drive(int distanceMm, ushort baseSpeed, CancellationToken ct)
     {
-        Console.WriteLine($"CorridorDrive: target={distanceMm}mm speed={baseSpeed}");
+        int driveTimeMs = (int)((distanceMm * 1000.0) / baseSpeed * FudgeFactor);
+        Console.WriteLine($"CorridorDrive: target={distanceMm}mm speed={baseSpeed} time={driveTimeMs}ms");
 
-        if (!Zumo.Instance.Drive.ResetEncoderDistance())
-        {
-            Console.WriteLine("CorridorDrive: failed to reset encoders.");
-            return;
-        }
+        int rightInit = GetSideSectorClearance(45);
+        int leftInit = GetSideSectorClearance(315);
+        sbyte initialOffset = ComputeOffset(rightInit, leftInit);
+        Console.WriteLine($"  initial offset={initialOffset} (R={rightInit} L={leftInit})");
 
-        Zumo.Instance.Drive.ConstantSpeed((short)baseSpeed, (short)baseSpeed);
+        Zumo.Instance.Drive.ConstantSpeed(
+            (short)(baseSpeed + initialOffset),
+            (short)(baseSpeed - initialOffset));
+
+        var stopwatch = Stopwatch.StartNew();
+        int iteration = 0;
+        int lastPrintedIter = -1;
 
         try
         {
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
+                iteration++;
 
                 int front = GetSectorClearance(0, FrontSectorHalfWidth);
                 if (front > 0 && front <= FrontStopMm)
@@ -38,24 +48,31 @@ public class CorridorDriver
                     break;
                 }
 
-                int rightDist = GetSideSectorClearance(45);
-                int leftDist = GetSideSectorClearance(315);
-
-                short correction = ComputeCorrection(rightDist, leftDist);
-
-                short leftSpeed = (short)(baseSpeed + correction);
-                short rightSpeed = (short)(baseSpeed - correction);
-
-                Zumo.Instance.Drive.ConstantSpeed(leftSpeed, rightSpeed);
-
-                var (_, _, totalDist) = ReadEncoderDistance();
-                if (totalDist >= distanceMm)
+                long elapsed = stopwatch.ElapsedMilliseconds;
+                if (elapsed >= driveTimeMs)
                 {
-                    Console.WriteLine($"CorridorDrive: reached target ({totalDist}/{distanceMm}mm)");
+                    Console.WriteLine($"CorridorDrive: reached target ({elapsed}ms / {driveTimeMs}ms)");
                     break;
                 }
 
-                Console.WriteLine($"  dist={totalDist} front={front} R={rightDist} L={leftDist} corr={correction} spd=({leftSpeed},{rightSpeed})");
+                int rightDist = GetSideSectorClearance(45);
+                int leftDist = GetSideSectorClearance(315);
+
+                sbyte offset = ComputeOffset(rightDist, leftDist);
+
+                if (iteration > StartupGraceIterations)
+                {
+                    short leftSpeed = (short)(baseSpeed + offset);
+                    short rightSpeed = (short)(baseSpeed - offset);
+                    Zumo.Instance.Drive.ConstantSpeed(leftSpeed, rightSpeed);
+                }
+
+                if (iteration - lastPrintedIter >= 3)
+                {
+                    int estDist = (int)(elapsed * baseSpeed / 1000.0);
+                    Console.WriteLine($"  iter={iteration} dist=~{estDist}mm time={elapsed}ms front={front} R={rightDist} L={leftDist} offset={offset}");
+                    lastPrintedIter = iteration;
+                }
 
                 Thread.Sleep(PollIntervalMs);
             }
@@ -67,37 +84,25 @@ public class CorridorDriver
         finally
         {
             Zumo.Instance.Drive.Stop();
+            long elapsed = stopwatch.ElapsedMilliseconds;
+            int estDist = (int)(elapsed * baseSpeed / 1000.0);
+            Console.WriteLine($"  final: time={elapsed}ms est_dist=~{estDist}mm");
         }
     }
 
-    private static int GetSideSectorClearance(int centerAngle)
+    private static sbyte ComputeOffset(int rightDist, int leftDist)
     {
-        List<int> values = new();
+        bool rTooFar = rightDist == 0 || rightDist > NoWallThresholdMm;
+        bool lTooFar = leftDist == 0 || leftDist > NoWallThresholdMm;
 
-        for (int offset = -SideSectorHalfWidth; offset <= SideSectorHalfWidth; offset += SideSectorStep)
-        {
-            int angle = (centerAngle + offset + 360) % 360;
-            int distance = Zumo.Instance.Lidar[angle].Distance;
-            if (distance > 0 && distance < SideIgnoreNoWallMm) values.Add(distance);
-        }
-
-        if (values.Count == 0) return 0;
-
-        values.Sort();
-        int qi = Math.Max(0, (values.Count - 1) / 4);
-        return values[qi];
-    }
-
-    private static short ComputeCorrection(int rightDist, int leftDist)
-    {
-        if (rightDist == 0 && leftDist == 0) return 0;
+        if (rTooFar && lTooFar) return 0;
 
         int diff;
-        if (rightDist == 0)
+        if (rTooFar)
         {
             diff = -leftDist;
         }
-        else if (leftDist == 0)
+        else if (lTooFar)
         {
             diff = rightDist;
         }
@@ -108,7 +113,25 @@ public class CorridorDriver
 
         double raw = diff * CenteringGain;
         raw = Math.Clamp(raw, -MaxCorrectionSpeed, MaxCorrectionSpeed);
-        return (short)Math.Round(raw);
+        return (sbyte)Math.Round(raw);
+    }
+
+    private static int GetSideSectorClearance(int centerAngle)
+    {
+        List<int> values = new();
+
+        for (int offset = -SideSectorHalfWidth; offset <= SideSectorHalfWidth; offset += SideSectorStep)
+        {
+            int angle = (centerAngle + offset + 360) % 360;
+            int distance = Zumo.Instance.Lidar[angle].Distance;
+            if (distance > 0) values.Add(distance);
+        }
+
+        if (values.Count == 0) return 0;
+
+        values.Sort();
+        int qi = Math.Max(0, (values.Count - 1) / 4);
+        return values[qi];
     }
 
     private static int GetSectorClearance(int centerAngle, int halfWidth)
@@ -127,12 +150,5 @@ public class CorridorDriver
         values.Sort();
         int qi = Math.Max(0, (values.Count - 1) / 4);
         return values[qi];
-    }
-
-    private static (short left, short right, int total) ReadEncoderDistance()
-    {
-        (short left, short right) = Zumo.Instance.Drive.GetEncoderDistance();
-        int total = (Math.Abs(left) + Math.Abs(right)) / 2;
-        return (left, right, total);
     }
 }
