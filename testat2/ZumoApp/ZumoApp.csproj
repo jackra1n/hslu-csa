@@ -5,10 +5,15 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<RuntimeIdentifier>linux-arm64</RuntimeIdentifier>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\ZumoLib\ZumoLib.csproj" />
 	</ItemGroup>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<Exec Command="rsync -avz --delete &quot;$(TargetDir)&quot; &quot;rpicsa-home:netcore/$(ProjectName)&quot;" />
+	</Target>
 
 </Project>
