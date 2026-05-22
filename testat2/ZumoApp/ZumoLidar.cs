@@ -5,6 +5,8 @@ namespace ZumoApp {
     public class ZumoLidar {
 
         private static bool stop = false;
+        private static Task? monitorTask;
+
         /// <summary>
         ///  Schaltet das Lidar ein.
         /// </summary>
@@ -25,7 +27,7 @@ namespace ZumoApp {
         /// <param name="distance">Distanz zum zu einem potentiellen Hindernis in mm.</param>
         public static void LookAt(short distance) {
             stop = false;
-            Task.Run(() => {
+            monitorTask = Task.Run(() => {
                 while (!stop) {
                     LidarPoint p = Zumo.Instance.Lidar[45];
                     if (p.Distance <= distance && p.Distance > 0) {
@@ -36,6 +38,16 @@ namespace ZumoApp {
                     Thread.Sleep(100);
                 }
             });
+        }
+        /// <summary>
+        /// Wartet bis der Monitor-Task beendet ist.
+        /// Muss nach Off() aufgerufen werden, da Off() stop=true setzt
+        /// und der Monitor-Task dann beendet wird.
+        /// </summary>
+        public static void WaitForCompletion() {
+            if (monitorTask != null) {
+                monitorTask.Wait(TimeSpan.FromSeconds(5));
+            }
         }
         /// <summary>
         ///  Schaltet das Lidar aus.
