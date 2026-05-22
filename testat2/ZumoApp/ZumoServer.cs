@@ -83,11 +83,11 @@ namespace ZumoApp {
             Console.WriteLine($"Starting drive {routeName}...");
 
             try {
-                ZumoLidar.On();
                 ZumoLidar.LookAt(LidarDistanceMm);
 
                 string response = driveFunc();
-                ZumoLidar.Off();
+                ZumoLidar.WaitForCompletion();
+                response = Zumo.Instance.Drive.Response;
 
                 string logFileName = SaveLogFile(routeName, response);
                 Console.WriteLine($"Log saved to: {logFileName}");
@@ -97,7 +97,6 @@ namespace ZumoApp {
                 return logFileName;
             } catch (Exception ex) {
                 Console.WriteLine($"Drive {routeName} error: {ex.Message}");
-                ZumoLidar.Off();
                 Zumo.Instance.Drive.ResetStop();
                 return null;
             }
