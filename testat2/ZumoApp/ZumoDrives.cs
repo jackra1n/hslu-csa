@@ -9,6 +9,7 @@ namespace ZumoApp {
             return drive.Response;
         }
         public static string ZumoDriveA() {
+            drive.ResetStop();
             drive.Response = "";
             ZumoDrives.ZumoPing();
             drive.Track(500, 100, 100);
@@ -21,6 +22,7 @@ namespace ZumoApp {
             return drive.Response;
         }
         public static string ZumoDriveB() {
+            drive.ResetStop();
             drive.Response = "";
             ZumoDrives.ZumoPing();
             drive.Track(500, 100, 100);
@@ -30,10 +32,10 @@ namespace ZumoApp {
             drive.Track(500, 100, 100);
             drive.Turn(-135, 100, 100);
             drive.Track(700, 100, 100);
-            ZumoLidar.Off();
             return drive.Response;
         }
         public static string ZumoDriveC() {
+            drive.ResetStop();
             drive.Response = "";
             ZumoDrives.ZumoPing();
             drive.Track(500, 100, 100);
