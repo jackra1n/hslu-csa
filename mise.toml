@@ -2,4 +2,4 @@
 dotnet = "10"
 
 [tasks.build]
-run = "dotnet build ZumoTemplate"
+run = "dotnet build"
