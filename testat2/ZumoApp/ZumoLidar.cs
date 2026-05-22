@@ -29,8 +29,8 @@ namespace ZumoApp {
                 while (!stop) {
                     LidarPoint p = Zumo.Instance.Lidar[45];
                     if (p.Distance <= distance && p.Distance > 0) {
-                        // Ein Hindernis wurde detektiert, höchste Zeit für den Notstopp.
-                        Console.WriteLine($"Speed {Zumo.Instance.Lidar.Speed} °/sec \tDistance: {p.Distance / 1000f} m    ");
+                        Console.WriteLine($"Obstacle detected at {p.Distance}mm - emergency stop!");
+                        Zumo.Instance.Drive.Stop();
                         return;
                     }
                     Thread.Sleep(100);
