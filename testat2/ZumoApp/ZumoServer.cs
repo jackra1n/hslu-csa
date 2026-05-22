@@ -35,6 +35,7 @@ namespace ZumoApp {
         }
 
         static void HandleClient(TcpClient client) {
+            ZumoLidar.On();
             try {
                 using (client) {
                     NetworkStream stream = client.GetStream();
@@ -62,17 +63,19 @@ namespace ZumoApp {
                             break;
                         default:
                             writer.WriteLine("Invalid choice. Use A, B, or C.");
-                            return;
+                            break;
                     }
 
                     if (logFileName != null) {
                         writer.WriteLine($"Drive completed. Log available at port {HttpPort}: /{logFileName}");
-                    } else {
+                    } else if (choice == "A" || choice == "B" || choice == "C") {
                         writer.WriteLine("Drive failed. No log saved.");
                     }
                 }
             } catch (Exception ex) {
                 Console.WriteLine($"Client handler error: {ex.Message}");
+            } finally {
+                ZumoLidar.Off();
             }
         }
 
